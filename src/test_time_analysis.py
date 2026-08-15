@@ -9,46 +9,62 @@ from analysis.time_analysis import (
 
 
 def main():
-
+    # ---------------------------------------------------------
+    # LOAD DATA
+    # ---------------------------------------------------------
     raw_df = load_dataset()
 
+    # ---------------------------------------------------------
+    # NORMALIZE CASES
+    # ---------------------------------------------------------
     cases_df = normalize_cases(raw_df)
 
-    monthly = analyze_monthly_trends(
-        cases_df
-    )
+    # ---------------------------------------------------------
+    # MONTHLY TREND ANALYSIS
+    # ---------------------------------------------------------
+    monthly = analyze_monthly_trends(cases_df)
 
-    windows = analyze_15_day_windows(
-        cases_df
-    )
+    # ---------------------------------------------------------
+    # ROLLING 15-DAY ANALYSIS
+    # ---------------------------------------------------------
+    windows = analyze_15_day_windows(cases_df)
 
-    alerts = detect_15_day_spikes(
-        windows
-    )
+    # ---------------------------------------------------------
+    # 15-DAY HIGH-VOLUME OBSERVATIONS
+    # ---------------------------------------------------------
+    alerts = detect_15_day_spikes(windows)
 
+    # =========================================================
+    # PRINT MONTHLY TRENDS
+    # =========================================================
     print("\n" + "=" * 70)
     print("MONTHLY TRENDS")
     print("=" * 70)
 
-    for item in monthly:
+    for item in monthly["months"]:
         print(item)
 
-    print("\n" + "=" * 70)
-    print("15-DAY WINDOWS")
-    print("=" * 70)
+    print("\nHighest volume month:")
+    print(monthly["highest_volume_month"])
 
-    for item in windows:
-        print(item)
+    print("\nLowest volume month:")
+    print(monthly["lowest_volume_month"])
 
+    print("\nAverage monthly cases:")
+    print(monthly["average_monthly_cases"])
+
+    # =========================================================
+    # PRINT 15-DAY HIGH-VOLUME OBSERVATIONS
+    # =========================================================
     print("\n" + "=" * 70)
-    print("15-DAY ALERTS")
+    print("15-DAY HIGH-VOLUME OBSERVATIONS")
     print("=" * 70)
 
     if alerts:
         for item in alerts:
             print(item)
     else:
-        print("No 15-day volume alerts detected.")
+        print("No high-volume 15-day observations detected.")
 
     print("\n" + "=" * 70)
 

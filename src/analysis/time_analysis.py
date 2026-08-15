@@ -22,13 +22,21 @@ def prepare_dates(cases: pd.DataFrame) -> pd.DataFrame:
 
 def analyze_monthly_trends(
     cases: pd.DataFrame,
-) -> list[dict]:
-    """Calculate case volume by reporting month."""
+) -> dict:
+    """
+    Calculate monthly case-volume trends and
+    descriptive month-over-month changes.
+    """
 
     df = prepare_dates(cases)
 
     if df.empty:
-        return []
+        return {
+            "months": [],
+            "highest_volume_month": None,
+            "lowest_volume_month": None,
+            "average_monthly_cases": 0.0,
+        }
 
     monthly = (
         df.groupby("month")
@@ -53,18 +61,90 @@ def analyze_monthly_trends(
         * 100
     ).round(1)
 
-    return [
-        {
-            "month": row["month"],
-            "cases": int(row["cases"]),
-            "serious_cases": int(row["serious_cases"]),
-            "serious_percentage": float(
-                row["serious_percentage"]
-            ),
-        }
-        for _, row in monthly.iterrows()
-    ]
+    monthly["previous_month_cases"] = (
+        monthly["cases"].shift(1)
+    )
 
+    monthly["month_over_month_change_percentage"] = (
+        (
+            monthly["cases"]
+            - monthly["previous_month_cases"]
+        )
+        / monthly["previous_month_cases"]
+        * 100
+    ).round(1)
+
+    monthly.loc[
+        monthly["previous_month_cases"].isna(),
+        "month_over_month_change_percentage",
+    ] = None
+
+    highest_idx = monthly["cases"].idxmax()
+    lowest_idx = monthly["cases"].idxmin()
+
+    months = []
+
+    for _, row in monthly.iterrows():
+
+        months.append(
+            {
+                "month": row["month"],
+                "cases": int(row["cases"]),
+                "serious_cases": int(
+                    row["serious_cases"]
+                ),
+                "serious_percentage": float(
+                    row["serious_percentage"]
+                ),
+                "month_over_month_change_percentage": (
+                    None
+                    if pd.isna(
+                        row[
+                            "month_over_month_change_percentage"
+                        ]
+                    )
+                    else float(
+                        row[
+                            "month_over_month_change_percentage"
+                        ]
+                    )
+                ),
+                "is_highest_volume_month": (
+                    row.name == highest_idx
+                ),
+                "is_lowest_volume_month": (
+                    row.name == lowest_idx
+                ),
+            }
+        )
+
+    return {
+        "months": months,
+        "highest_volume_month": {
+            "month": monthly.loc[
+                highest_idx, "month"
+            ],
+            "cases": int(
+                monthly.loc[
+                    highest_idx, "cases"
+                ]
+            ),
+        },
+        "lowest_volume_month": {
+            "month": monthly.loc[
+                lowest_idx, "month"
+            ],
+            "cases": int(
+                monthly.loc[
+                    lowest_idx, "cases"
+                ]
+            ),
+        },
+        "average_monthly_cases": round(
+            float(monthly["cases"].mean()),
+            1,
+        ),
+    }
 
 def analyze_15_day_windows(
     cases: pd.DataFrame,
