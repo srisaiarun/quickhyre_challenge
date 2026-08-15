@@ -1,0 +1,26 @@
+Write the LIMITATIONS section of the pharmacovigilance report.
+
+Use only the supplied limitation evidence.
+
+Clearly describe limitations related to:
+
+- SOC-level analysis
+- expectedness
+- history of actions
+- causality
+
+Do not introduce additional limitations that are not supplied.
+
+Return JSON with exactly this structure:
+
+{
+  "section": "limitations",
+  "claims": [
+    {
+      "text": "...",
+      "evidence_ids": ["EV-..."]
+    }
+  ]
+}
+
+Every factual claim MUST have at least one evidence ID.

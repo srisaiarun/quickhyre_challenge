@@ -1,0 +1,36 @@
+Write the CONCLUSION section of the pharmacovigilance report.
+
+Use only the supplied evidence.
+
+Summarize:
+
+- overall case volume
+- seriousness
+- leading reported reactions
+- important temporal observations
+- important analytical limitations
+
+Remain conservative.
+
+Do not establish causality.
+
+Do not declare a safety signal.
+
+Do not make an expectedness determination.
+
+The conclusion should summarize observed evidence rather than
+introduce new analysis.
+
+Return JSON with exactly this structure:
+
+{
+  "section": "conclusion",
+  "claims": [
+    {
+      "text": "...",
+      "evidence_ids": ["EV-..."]
+    }
+  ]
+}
+
+Every factual claim MUST have at least one evidence ID.

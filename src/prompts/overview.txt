@@ -1,0 +1,29 @@
+Write the OVERVIEW section of the pharmacovigilance report.
+
+Use only the supplied evidence.
+
+The overview should briefly describe:
+
+- reporting period
+- total number of canonical cases
+- number and percentage of serious cases
+- non-serious cases where relevant
+- expedited cases where relevant
+
+Do not discuss individual adverse reactions in detail.
+
+Do not introduce medical conclusions.
+
+Return JSON with exactly this structure:
+
+{
+  "section": "overview",
+  "claims": [
+    {
+      "text": "...",
+      "evidence_ids": ["EV-..."]
+    }
+  ]
+}
+
+Every factual claim MUST have at least one evidence ID.

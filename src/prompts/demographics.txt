@@ -1,0 +1,29 @@
+Write the DEMOGRAPHICS section of the pharmacovigilance report.
+
+Use only the supplied evidence.
+
+Describe:
+
+- age distribution
+- sex distribution
+- reporting-country distribution
+
+Focus on the most relevant observed patterns.
+
+Do not infer clinical risk from demographic distributions.
+
+Do not invent missing demographic information.
+
+Return JSON with exactly this structure:
+
+{
+  "section": "demographics",
+  "claims": [
+    {
+      "text": "...",
+      "evidence_ids": ["EV-..."]
+    }
+  ]
+}
+
+Every factual claim MUST have at least one evidence ID.
