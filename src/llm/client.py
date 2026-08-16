@@ -38,6 +38,10 @@ class GeminiClient:
 
         self.model = model
 
+    # =========================================================
+    # PLAIN TEXT GENERATION
+    # =========================================================
+
     def generate(
         self,
         prompt: str,
@@ -55,9 +59,7 @@ class GeminiClient:
         )
 
         if system_instruction:
-            config.system_instruction = (
-                system_instruction
-            )
+            config.system_instruction = system_instruction
 
         response = self.client.models.generate_content(
             model=self.model,
@@ -72,20 +74,31 @@ class GeminiClient:
 
         return response.text.strip()
 
+    # =========================================================
+    # STRUCTURED JSON GENERATION
+    # =========================================================
+
     def generate_json(
         self,
         prompt: str,
         system_instruction: str | None = None,
         temperature: float = 0.1,
-        max_output_tokens: int = 3000,
+        max_output_tokens: int = 6000,
         max_retries: int = 3,
     ) -> dict:
         """
         Generate structured JSON from Gemini.
 
-        Retries temporary server/service failures such as
-        HTTP 503 before returning a final error.
+        The response is requested using Gemini's JSON mode
+        and validated against the expected structure.
+
+        Temporary Gemini service failures and malformed/
+        truncated JSON responses are retried.
         """
+
+        # -----------------------------------------------------
+        # RESPONSE SCHEMA
+        # -----------------------------------------------------
 
         config = types.GenerateContentConfig(
             temperature=temperature,
@@ -127,15 +140,23 @@ class GeminiClient:
         )
 
         if system_instruction:
-            config.system_instruction = (
-                system_instruction
-            )
+            config.system_instruction = system_instruction
 
         last_error = None
+
+        # -----------------------------------------------------
+        # RETRY LOOP
+        # -----------------------------------------------------
 
         for attempt in range(max_retries + 1):
 
             try:
+
+                print(
+                    f"      Gemini attempt "
+                    f"{attempt + 1}/{max_retries + 1}..."
+                )
+
                 response = (
                     self.client.models.generate_content(
                         model=self.model,
@@ -144,22 +165,50 @@ class GeminiClient:
                     )
                 )
 
+                # -------------------------------------------------
+                # EMPTY RESPONSE
+                # -------------------------------------------------
+
                 if not response.text:
                     raise RuntimeError(
                         "Gemini returned an empty response."
                     )
 
+                raw_text = response.text.strip()
+
+                # -------------------------------------------------
+                # PARSE JSON
+                # -------------------------------------------------
+
                 try:
+
                     result = json.loads(
-                        response.text
+                        raw_text
                     )
 
                 except json.JSONDecodeError as exc:
+
+                    print(
+                        "\nGemini returned malformed JSON."
+                    )
+
+                    print(
+                        f"JSON error: {exc}"
+                    )
+
                     raise RuntimeError(
-                        "Gemini returned invalid JSON."
+                        "Gemini returned invalid or "
+                        "truncated JSON."
                     ) from exc
 
-                if not isinstance(result, dict):
+                # -------------------------------------------------
+                # BASIC STRUCTURE VALIDATION
+                # -------------------------------------------------
+
+                if not isinstance(
+                    result,
+                    dict,
+                ):
                     raise RuntimeError(
                         "Gemini JSON response is not "
                         "an object."
@@ -185,7 +234,80 @@ class GeminiClient:
                         "'claims' must be a list."
                     )
 
+                # -------------------------------------------------
+                # CLAIM VALIDATION
+                # -------------------------------------------------
+
+                for claim_index, claim in enumerate(
+                    result["claims"],
+                    start=1,
+                ):
+
+                    if not isinstance(
+                        claim,
+                        dict,
+                    ):
+                        raise RuntimeError(
+                            f"Claim {claim_index} "
+                            "is not an object."
+                        )
+
+                    if "text" not in claim:
+                        raise RuntimeError(
+                            f"Claim {claim_index} "
+                            "is missing 'text'."
+                        )
+
+                    if "evidence_ids" not in claim:
+                        raise RuntimeError(
+                            f"Claim {claim_index} "
+                            "is missing "
+                            "'evidence_ids'."
+                        )
+
+                    if not isinstance(
+                        claim["text"],
+                        str,
+                    ):
+                        raise RuntimeError(
+                            f"Claim {claim_index} "
+                            "text must be a string."
+                        )
+
+                    if not isinstance(
+                        claim["evidence_ids"],
+                        list,
+                    ):
+                        raise RuntimeError(
+                            f"Claim {claim_index} "
+                            "evidence_ids must "
+                            "be a list."
+                        )
+
+                    # Evidence IDs should be strings.
+                    for evidence_id in claim[
+                        "evidence_ids"
+                    ]:
+
+                        if not isinstance(
+                            evidence_id,
+                            str,
+                        ):
+                            raise RuntimeError(
+                                f"Claim {claim_index} "
+                                "contains a non-string "
+                                "evidence ID."
+                            )
+
+                # -------------------------------------------------
+                # SUCCESS
+                # -------------------------------------------------
+
                 return result
+
+            # -----------------------------------------------------
+            # ERROR HANDLING
+            # -----------------------------------------------------
 
             except Exception as exc:
 
@@ -195,31 +317,53 @@ class GeminiClient:
 
                 is_temporary = (
                     "503" in error_text
-                    or "UNAVAILABLE" in error_text
+                    or "UNAVAILABLE"
+                    in error_text
                     or "high demand"
                     in error_text.lower()
                     or "temporarily"
                     in error_text.lower()
+                    or "invalid or truncated JSON"
+                    in error_text
+                    or "malformed JSON"
+                    in error_text
                 )
 
+                # Permanent error.
                 if not is_temporary:
                     raise
 
+                # No retries remaining.
                 if attempt >= max_retries:
                     break
 
                 wait_seconds = 2 ** attempt
 
                 print(
-                    f"\nGemini temporarily unavailable. "
+                    "\nGemini generation failed "
+                    "temporarily."
+                )
+
+                print(
+                    f"Reason: {error_text}"
+                )
+
+                print(
                     f"Retrying in {wait_seconds}s "
                     f"(attempt {attempt + 1}/"
                     f"{max_retries})..."
                 )
 
-                time.sleep(wait_seconds)
+                time.sleep(
+                    wait_seconds
+                )
+
+        # ---------------------------------------------------------
+        # ALL RETRIES FAILED
+        # ---------------------------------------------------------
 
         raise RuntimeError(
-            "Gemini remained unavailable after "
+            "Gemini failed to produce valid "
+            "structured JSON after "
             f"{max_retries} retries."
         ) from last_error

@@ -14,6 +14,22 @@ def create_evidence_registry(
     """
 
     registry = {}
+        # =========================================================
+    # REPORTING PERIOD
+    # =========================================================
+
+    registry["EV-REPORT-001"] = {
+        "evidence_id": "EV-REPORT-001",
+        "category": "reporting_period",
+        "metric": "reporting_period",
+        "value": deepcopy(
+            evidence["reporting_period"]
+        ),
+        "description": (
+            "Start and end dates of the "
+            "analysis reporting period."
+        ),
+    }
 
     # =========================================================
     # CASE VOLUME
@@ -71,6 +87,18 @@ def create_evidence_registry(
         "description": (
             "Number of cases meeting expedited "
             "reporting criteria."
+        ),
+    }
+    registry["EV-CASE-006"] = {
+        "evidence_id": "EV-CASE-006",
+        "category": "case_volume",
+        "metric": "expedited_percentage",
+        "value": case_volume[
+            "expedited_percentage"
+        ],
+        "description": (
+            "Percentage of canonical cases "
+            "meeting expedited reporting criteria."
         ),
     }
 

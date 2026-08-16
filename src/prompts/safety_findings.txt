@@ -1,20 +1,38 @@
 Write the SAFETY FINDINGS section of the pharmacovigilance report.
 
-Use only the supplied evidence.
+Use ONLY the supplied evidence.
 
-Describe the most frequently reported reactions and their
-observed case counts and percentages.
+Focus on the most important observed findings.
 
-Also describe the reported outcome distribution.
+Describe:
 
-Pay particular attention to the leading reactions and serious
-reaction findings.
+- the total reaction-record volume if supplied
+- the five most frequently reported reactions
+- their observed case counts and percentages
+- the leading serious reactions
+- the reported outcome distribution
 
-Do not claim that bisoprolol caused any reaction.
+Keep the response concise.
 
-Do not call any reaction a confirmed safety signal.
+Do NOT attempt to describe every reaction in the evidence registry.
 
-Do not infer expectedness.
+Do NOT calculate new statistics.
+
+Do NOT claim that bisoprolol caused any reaction.
+
+Do NOT call any reaction a confirmed safety signal.
+
+Do NOT infer expectedness.
+
+Do NOT infer causality.
+
+Do NOT infer clinical risk.
+
+Describe findings as observed reports only.
+
+Every factual claim MUST have at least one evidence ID.
+
+Every number in a claim MUST be directly supported by its cited evidence.
 
 Return JSON with exactly this structure:
 
@@ -28,4 +46,7 @@ Return JSON with exactly this structure:
   ]
 }
 
-Every factual claim MUST have at least one evidence ID.
+Keep the number of claims between 3 and 6.
+
+Prefer concise claims containing several directly supported
+facts rather than many small repetitive claims.
