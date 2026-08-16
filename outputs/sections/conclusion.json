@@ -2,25 +2,43 @@
   "section": "conclusion",
   "claims": [
     {
-      "text": "The reporting period included a total of 1,024 canonical cases.",
+      "text": "The reporting period included a total of 1024 canonical cases.",
       "evidence_ids": [
         "EV-CASE-001"
       ]
     },
     {
-      "text": "Of these, 1,023 cases were classified as serious.",
+      "text": "Among these, 1023 cases were classified as serious.",
       "evidence_ids": [
         "EV-CASE-002"
       ]
     },
     {
-      "text": "The most frequently reported reactions were Acute kidney injury (80 cases, 7.8%), Drug ineffective (54 cases, 5.3%), Hypotension (46 cases, 4.5%), Drug interaction (43 cases, 4.2%), and Dyspnoea (38 cases, 3.7%).",
+      "text": "The most frequently reported reactions were Acute kidney injury (80 cases, 7.8%), Drug ineffective (54 cases, 5.3%), Hypotension (46 cases, 4.5%), Drug interaction (43 cases, 4.2%) and Dyspnoea (38 cases, 3.7%).",
       "evidence_ids": [
         "EV-REACTION-TOP-001",
         "EV-REACTION-TOP-002",
         "EV-REACTION-TOP-003",
         "EV-REACTION-TOP-004",
         "EV-REACTION-TOP-005"
+      ]
+    },
+    {
+      "text": "Temporal analysis identified observed windows with case counts of 109, 21, 61, 60, 59, 57 and 57 cases.",
+      "evidence_ids": [
+        "EV-TREND-001",
+        "EV-TREND-002",
+        "EV-TREND-15D-001",
+        "EV-TREND-15D-002",
+        "EV-TREND-15D-003",
+        "EV-TREND-15D-004",
+        "EV-TREND-15D-005"
+      ]
+    },
+    {
+      "text": "Analytical limitations include the absence of SOC-level analysis, inability to determine expectedness, lack of history‑of‑actions data, and that the dataset does not establish causality between bisoprolol and reported reactions.",
+      "evidence_ids": [
+        "EV-LIMIT-001"
       ]
     }
   ],
@@ -31,7 +49,7 @@
     "evidence_validation": [
       {
         "claim_index": 1,
-        "claim": "The reporting period included a total of 1,024 canonical cases.",
+        "claim": "The reporting period included a total of 1024 canonical cases.",
         "evidence_ids": [
           "EV-CASE-001"
         ],
@@ -40,7 +58,7 @@
       },
       {
         "claim_index": 2,
-        "claim": "Of these, 1,023 cases were classified as serious.",
+        "claim": "Among these, 1023 cases were classified as serious.",
         "evidence_ids": [
           "EV-CASE-002"
         ],
@@ -49,7 +67,7 @@
       },
       {
         "claim_index": 3,
-        "claim": "The most frequently reported reactions were Acute kidney injury (80 cases, 7.8%), Drug ineffective (54 cases, 5.3%), Hypotension (46 cases, 4.5%), Drug interaction (43 cases, 4.2%), and Dyspnoea (38 cases, 3.7%).",
+        "claim": "The most frequently reported reactions were Acute kidney injury (80 cases, 7.8%), Drug ineffective (54 cases, 5.3%), Hypotension (46 cases, 4.5%), Drug interaction (43 cases, 4.2%) and Dyspnoea (38 cases, 3.7%).",
         "evidence_ids": [
           "EV-REACTION-TOP-001",
           "EV-REACTION-TOP-002",
@@ -59,12 +77,36 @@
         ],
         "valid": true,
         "errors": []
+      },
+      {
+        "claim_index": 4,
+        "claim": "Temporal analysis identified observed windows with case counts of 109, 21, 61, 60, 59, 57 and 57 cases.",
+        "evidence_ids": [
+          "EV-TREND-001",
+          "EV-TREND-002",
+          "EV-TREND-15D-001",
+          "EV-TREND-15D-002",
+          "EV-TREND-15D-003",
+          "EV-TREND-15D-004",
+          "EV-TREND-15D-005"
+        ],
+        "valid": true,
+        "errors": []
+      },
+      {
+        "claim_index": 5,
+        "claim": "Analytical limitations include the absence of SOC-level analysis, inability to determine expectedness, lack of history‑of‑actions data, and that the dataset does not establish causality between bisoprolol and reported reactions.",
+        "evidence_ids": [
+          "EV-LIMIT-001"
+        ],
+        "valid": true,
+        "errors": []
       }
     ],
     "number_validation": [
       {
         "claim_index": 1,
-        "claim": "The reporting period included a total of 1,024 canonical cases.",
+        "claim": "The reporting period included a total of 1024 canonical cases.",
         "claim_numbers": [
           1024.0
         ],
@@ -76,7 +118,7 @@
       },
       {
         "claim_index": 2,
-        "claim": "Of these, 1,023 cases were classified as serious.",
+        "claim": "Among these, 1023 cases were classified as serious.",
         "claim_numbers": [
           1023.0
         ],
@@ -88,7 +130,7 @@
       },
       {
         "claim_index": 3,
-        "claim": "The most frequently reported reactions were Acute kidney injury (80 cases, 7.8%), Drug ineffective (54 cases, 5.3%), Hypotension (46 cases, 4.5%), Drug interaction (43 cases, 4.2%), and Dyspnoea (38 cases, 3.7%).",
+        "claim": "The most frequently reported reactions were Acute kidney injury (80 cases, 7.8%), Drug ineffective (54 cases, 5.3%), Hypotension (46 cases, 4.5%), Drug interaction (43 cases, 4.2%) and Dyspnoea (38 cases, 3.7%).",
         "claim_numbers": [
           80.0,
           7.8,
@@ -113,6 +155,38 @@
           54.0,
           80.0
         ],
+        "unsupported_numbers": [],
+        "valid": true
+      },
+      {
+        "claim_index": 4,
+        "claim": "Temporal analysis identified observed windows with case counts of 109, 21, 61, 60, 59, 57 and 57 cases.",
+        "claim_numbers": [
+          109.0,
+          21.0,
+          61.0,
+          60.0,
+          59.0,
+          57.0,
+          57.0
+        ],
+        "supported_numbers": [
+          21.0,
+          56.0,
+          57.0,
+          59.0,
+          60.0,
+          61.0,
+          109.0
+        ],
+        "unsupported_numbers": [],
+        "valid": true
+      },
+      {
+        "claim_index": 5,
+        "claim": "Analytical limitations include the absence of SOC-level analysis, inability to determine expectedness, lack of history‑of‑actions data, and that the dataset does not establish causality between bisoprolol and reported reactions.",
+        "claim_numbers": [],
+        "supported_numbers": [],
         "unsupported_numbers": [],
         "valid": true
       }
