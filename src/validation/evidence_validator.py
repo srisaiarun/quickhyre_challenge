@@ -9,48 +9,145 @@ from typing import Any
 # =============================================================
 
 NUMBER_PATTERN = re.compile(
-    r"(?<![\w.])-?\d+(?:,\d{3})*(?:\.\d+)?%?"
+    r"(?<![\w.])"
+    r"-?\d+(?:,\d{3})*"
+    r"(?:\.\d+)?"
+    r"%?"
+    r"(?![\w.-])"
 )
 
 
-DATE_PATTERN = re.compile(
-    r"\b(?:19|20)\d{2}[-/]\d{1,2}[-/]\d{1,2}\b"
+# =============================================================
+# DATE PATTERNS
+# =============================================================
+
+# ISO month:
+#   2025-07
+#   2024-12
+#
+# ISO full date:
+#   2025-07-15
+#   2025-02-13
+#
+# We mask these before extracting numbers.
+
+ISO_DATE_PATTERN = re.compile(
+    r"\b\d{4}-\d{2}(?:-\d{2})?\b"
 )
 
 
-YEAR_PATTERN = re.compile(
-    r"\b(?:19|20)\d{2}\b"
+# Written dates:
+#
+#   February 13, 2025
+#   October 23 to November 6, 2025
+#   July 1 to July 15, 2025
+#
+# These are masked before numeric extraction so that
+# day/month/year components are not treated as statistics.
+
+WRITTEN_DATE_PATTERN = re.compile(
+    r"""
+    \b
+    (?:
+        January|February|March|April|May|June|
+        July|August|September|October|November|December
+    )
+    \s+
+    \d{1,2}
+    (?:
+        \s+
+        (?:to|through|-)
+        \s+
+        (?:
+            January|February|March|April|May|June|
+            July|August|September|October|November|December
+        )
+        \s+
+        \d{1,2}
+    )?
+    (?:
+        \s*,?
+        \s*
+        \d{4}
+    )?
+    \b
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 
 
-METHODOLOGY_NUMBER_PATTERNS = [
-    re.compile(r"\b15[- ]day\b", re.IGNORECASE),
-    re.compile(r"\b15[- ]days\b", re.IGNORECASE),
-]
+# =============================================================
+# DATE MASKING
+# =============================================================
 
+def _mask_dates(text: str) -> str:
+    """
+    Replace date expressions with spaces.
+
+    This preserves character positions while ensuring that
+    date components are not interpreted as analytical numbers.
+    """
+
+    masked_text = ISO_DATE_PATTERN.sub(
+        lambda match: " " * len(match.group(0)),
+        text,
+    )
+
+    masked_text = WRITTEN_DATE_PATTERN.sub(
+        lambda match: " " * len(match.group(0)),
+        masked_text,
+    )
+
+    return masked_text
+
+
+# =============================================================
+# RAW NUMBER EXTRACTION
+# =============================================================
 
 def _extract_numbers(text: str) -> list[str]:
     """
-    Extract numeric tokens from generated text.
+    Extract numeric values from generated claims while
+    ignoring numbers that are part of dates.
 
-    Examples:
+    Extracted examples:
+
         1024
         1,024
         99.9%
-        -41.3%
         7.8
+        -41.3
+
+    Ignored examples:
+
+        2025-07
+        2024-12
+        2025-02-13
+
+        February 13, 2025
+        October 23 to November 6, 2025
+        July 1 to July 15, 2025
     """
 
-    return NUMBER_PATTERN.findall(text)
+    masked_text = _mask_dates(text)
 
+    return NUMBER_PATTERN.findall(
+        masked_text
+    )
+
+
+# =============================================================
+# NUMBER NORMALIZATION
+# =============================================================
 
 def _normalize_number(value: str) -> float:
     """
     Normalize numeric strings for comparison.
 
     Examples:
-        "1,024" -> 1024.0
-        "99.9%" -> 99.9
+
+        "1,024"  -> 1024.0
+        "99.9%"  -> 99.9
         "-41.3%" -> -41.3
     """
 
@@ -64,6 +161,10 @@ def _normalize_number(value: str) -> float:
     return float(cleaned)
 
 
+# =============================================================
+# YEAR DETECTION
+# =============================================================
+
 def _is_year(
     number_text: str,
     full_text: str,
@@ -73,7 +174,7 @@ def _is_year(
     Determine whether a numeric token is a calendar year.
 
     Years such as 2024 and 2025 should not be treated as
-    unsupported analytical statistics.
+    analytical statistics.
     """
 
     try:
@@ -85,29 +186,12 @@ def _is_year(
     except ValueError:
         return False
 
-    if not 1900 <= value <= 2100:
-        return False
+    return 1900 <= value <= 2100
 
-    # Check whether this year belongs to an ISO-style date.
-    before = full_text[:match_start]
-    after = full_text[
-        match_start + len(number_text):
-    ]
 
-    if re.search(
-        r"\d{4}-$",
-        before,
-    ):
-        return True
-
-    if re.match(
-        r"-\d{1,2}-",
-        after,
-    ):
-        return True
-
-    return True
-
+# =============================================================
+# MEANINGFUL NUMBER EXTRACTION
+# =============================================================
 
 def _extract_meaningful_numbers(
     text: str,
@@ -117,7 +201,9 @@ def _extract_meaningful_numbers(
 
     Excludes:
 
+    - ISO dates such as 2025-02
     - ISO dates such as 2025-02-13
+    - written dates such as February 13, 2025
     - calendar years
     - the 15 in "15-day window"
 
@@ -132,28 +218,13 @@ def _extract_meaningful_numbers(
     meaningful: list[float] = []
 
     # ---------------------------------------------------------
-    # Mask complete ISO dates before extracting numbers.
-    #
-    # Example:
-    #
-    # 2025-02-13
-    #
-    # becomes:
-    #
-    #            [masked]
-    #
-    # This prevents 2025, 02 and 13 from being interpreted
-    # as analytical numbers.
+    # MASK ALL DATE EXPRESSIONS
     # ---------------------------------------------------------
 
-    masked_text = re.sub(
-        r"\b(?:19|20)\d{2}-\d{1,2}-\d{1,2}\b",
-        lambda match: " " * len(match.group(0)),
-        text,
-    )
+    masked_text = _mask_dates(text)
 
     # ---------------------------------------------------------
-    # Extract remaining numeric tokens.
+    # EXTRACT REMAINING NUMERIC TOKENS
     # ---------------------------------------------------------
 
     matches = list(
@@ -193,11 +264,14 @@ def _extract_meaningful_numbers(
             if raw == "15":
                 continue
 
+        # -----------------------------------------------------
+        # Normalize numeric value.
+        # -----------------------------------------------------
+
         try:
             meaningful.append(
                 _normalize_number(raw)
             )
-
         except ValueError:
             continue
 
@@ -383,6 +457,8 @@ def validate_claim_numbers(
     Special handling:
 
     - Calendar years are ignored.
+    - ISO dates are ignored.
+    - Written dates are ignored.
     - "15-day" methodology wording is ignored.
     - Percentage direction is handled conservatively so that
       -41.3 in evidence can support "41.3% decrease".
@@ -474,10 +550,11 @@ def validate_claim_numbers(
             # -------------------------------------------------
             # Percentage direction handling.
             #
-            # Example:
+            # Evidence:
+            #     -41.3
             #
-            # Evidence: -41.3
-            # Claim:     41.3% decrease
+            # Claim:
+            #     41.3% decrease
             #
             # Both represent the same observed change.
             # -------------------------------------------------
