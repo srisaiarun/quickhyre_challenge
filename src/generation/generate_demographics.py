@@ -83,6 +83,50 @@ PROMPTS_DIR = (
 
 
 # =============================================================
+# SECTION OUTPUT PATH
+# =============================================================
+
+SECTION_OUTPUT_DIR = (
+    BASE_DIR
+    / "outputs"
+    / "sections"
+)
+
+SECTION_OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True,
+)
+
+
+def save_section_output(
+    result: dict,
+    filename: str,
+) -> Path:
+    """
+    Save a validated section result to outputs/sections.
+    """
+
+    output_path = (
+        SECTION_OUTPUT_DIR
+        / filename
+    )
+
+    with open(
+        output_path,
+        "w",
+        encoding="utf-8",
+    ) as f:
+        json.dump(
+            result,
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    return output_path
+
+
+# =============================================================
 # PROMPT LOADING
 # =============================================================
 
@@ -241,6 +285,53 @@ STRICT GROUNDING REQUIREMENTS
 12. Evidence IDs must be copied exactly.
 
 13. Return ONLY the required JSON structure.
+
+14. Do not combine multiple demographic evidence items into
+    one claim unless every factual component of the combined
+    claim is directly supported by the cited evidence IDs.
+    
+NUMERIC GROUNDING RULES
+============================================================
+
+- Every numeric value appearing in a claim MUST appear
+  explicitly in the supplied evidence for that claim.
+
+- Do NOT calculate, derive, infer, estimate, round, aggregate,
+  subtract, compare, or transform numeric values.
+
+- Do NOT introduce any new numeric threshold or boundary.
+
+- Do NOT use comparative numeric expressions such as:
+  "less than 6%",
+  "more than 50%",
+  "approximately 40%",
+  "over 300 cases",
+  "under 5%",
+  "nearly 60%",
+  or similar expressions unless the exact numeric value
+  appearing in that expression is explicitly present in the
+  supplied evidence.
+
+- Do NOT convert evidence into a newly calculated percentage,
+  count, ratio, average, range, difference, or threshold.
+
+- Preserve all numerical values exactly as supplied by the
+  deterministic evidence.
+
+- Age-range labels such as <18, 18-44, 45-64, 65-74, and 75+
+  are category labels, NOT statistics. Preserve them exactly
+  when they are part of the evidence.
+
+- If describing additional demographic categories for which
+  detailed statistics are available, only state the values
+  explicitly supported by the evidence.
+
+- If a qualitative summary would require introducing an
+  unsupported number, omit the number and use a purely
+  qualitative statement instead.
+
+- When in doubt, omit the statement rather than introduce
+  an unsupported numeric value.
 
 The required JSON structure is:
 
@@ -613,6 +704,35 @@ def generate_demographics() -> dict:
     )
 
     # =========================================================
+    # BUILD FINAL RESULT
+    # =========================================================
+
+    result = {
+        "section": "demographics",
+        "claims": generated.get(
+            "claims",
+            [],
+        ),
+        "validation": validation,
+    }
+
+    # =========================================================
+    # SAVE VALIDATED OUTPUT
+    # =========================================================
+
+    if validation["valid"]:
+
+        output_path = save_section_output(
+            result=result,
+            filename="demographics.json",
+        )
+
+        print(
+            f"\n      Saved validated section:"
+            f"\n      {output_path}"
+        )
+
+    # =========================================================
     # FINAL STATUS
     # =========================================================
 
@@ -634,14 +754,7 @@ def generate_demographics() -> dict:
 
     print("=" * 70)
 
-    return {
-        "generated": generated,
-        "validation": validation,
-        "context": context,
-        "demographics_evidence": (
-            demographics_evidence
-        ),
-    }
+    return result
 
 
 # =============================================================

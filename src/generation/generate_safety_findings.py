@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -43,11 +44,10 @@ from validation.evidence_validator import (
     validate_generated_section,
 )
 
+
 # =============================================================
 # PATHS
 # =============================================================
-
-
 
 PROMPTS_DIR = BASE_DIR / "src" / "prompts"
 
@@ -84,30 +84,45 @@ def build_safety_findings_evidence(
     Select a compact, high-value evidence set for the
     Safety Findings section.
 
-    The LLM receives the leading observed reactions,
-    leading serious reactions, and outcome distribution.
+    The LLM receives:
+    - reaction metadata
+    - top five overall reactions
+    - top five serious reactions
+    - outcome distribution
     """
 
     required_ids = [
+        # -----------------------------------------------------
         # Reaction metadata
+        # -----------------------------------------------------
+
         "EV-REACTION-001",
         "EV-REACTION-002",
 
+        # -----------------------------------------------------
         # Top 5 reactions
+        # -----------------------------------------------------
+
         "EV-REACTION-TOP-001",
         "EV-REACTION-TOP-002",
         "EV-REACTION-TOP-003",
         "EV-REACTION-TOP-004",
         "EV-REACTION-TOP-005",
 
+        # -----------------------------------------------------
         # Top 5 serious reactions
+        # -----------------------------------------------------
+
         "EV-REACTION-SERIOUS-001",
         "EV-REACTION-SERIOUS-002",
         "EV-REACTION-SERIOUS-003",
         "EV-REACTION-SERIOUS-004",
         "EV-REACTION-SERIOUS-005",
 
+        # -----------------------------------------------------
         # Outcomes
+        # -----------------------------------------------------
+
         "EV-OUTCOME-001",
     ]
 
@@ -139,12 +154,13 @@ def build_safety_findings_prompt(
     """
     Build the grounded Safety Findings prompt.
 
-    Gemini receives:
+    The prompt strictly separates:
+        - factual claim text
+        - evidence IDs
 
-    1. System instructions
-    2. Section instructions
-    3. Approved evidence
-    4. Section-specific context
+    Evidence IDs MUST NOT appear inside claim text because
+    their numeric suffixes can otherwise be interpreted as
+    factual numbers by the numeric grounding validator.
     """
 
     safety_prompt = load_prompt(
@@ -158,12 +174,16 @@ def build_safety_findings_prompt(
     prompt = f"""
 {safety_prompt}
 
-IMPORTANT GROUNDING REQUIREMENTS:
+============================================================
+IMPORTANT GROUNDING REQUIREMENTS
+============================================================
 
-The following evidence IDs are the ONLY approved
-sources for factual claims in this response.
+The following evidence IDs are the ONLY approved sources
+for factual claims in this response.
 
-APPROVED EVIDENCE:
+============================================================
+APPROVED EVIDENCE
+============================================================
 
 {json.dumps(
     evidence,
@@ -171,7 +191,9 @@ APPROVED EVIDENCE:
     ensure_ascii=False,
 )}
 
-SECTION CONTEXT:
+============================================================
+SECTION CONTEXT
+============================================================
 
 {json.dumps(
     context,
@@ -179,25 +201,132 @@ SECTION CONTEXT:
     ensure_ascii=False,
 )}
 
-STRICT REQUIREMENTS:
+============================================================
+STRICT REQUIREMENTS
+============================================================
 
-- Use only the approved evidence above.
-- Every factual claim MUST cite one or more evidence IDs.
-- Preserve numerical values exactly as supplied.
-- Do not calculate new statistics.
-- Do not invent information.
-- Do not claim bisoprolol caused any reaction.
-- Do not establish causality.
-- Do not call any reaction a confirmed safety signal.
-- Do not infer expectedness.
-- Describe reaction frequencies as observed reporting data.
-- Describe outcomes as observed reporting data.
-- If discussing high-frequency reactions, describe them as
-  observed frequencies/rankings only.
-- If discussing serious reactions, describe them as
-  serious reaction findings in the supplied dataset.
-- Do not make clinical risk conclusions.
-- Return ONLY the required JSON structure.
+1. Use ONLY the approved evidence above.
+
+2. Every factual claim MUST contain one or more evidence IDs
+   in the "evidence_ids" array.
+
+3. Preserve numerical values EXACTLY as supplied by the
+   deterministic evidence.
+
+4. Do NOT calculate new statistics.
+
+5. Do NOT invent information.
+
+6. Do NOT claim bisoprolol caused any reaction.
+
+7. Do NOT establish causality.
+
+8. Do NOT call any reaction a confirmed safety signal.
+
+9. Do NOT infer expectedness.
+
+10. Describe reaction frequencies as observed reporting data.
+
+11. Describe outcomes as observed reporting data.
+
+12. If discussing high-frequency reactions, describe them as
+    observed frequencies/rankings only.
+
+13. If discussing serious reactions, describe them as serious
+    reaction findings in the supplied dataset.
+
+14. Do NOT make clinical risk conclusions.
+
+15. If evidence is insufficient to support a statement,
+    DO NOT make that statement.
+
+============================================================
+CRITICAL EVIDENCE-ID RULE
+============================================================
+
+16. NEVER place an evidence ID inside the claim "text".
+
+17. Evidence IDs MUST appear ONLY inside the "evidence_ids"
+    array.
+
+18. NEVER write evidence IDs in parentheses inside claim text.
+
+19. NEVER write evidence IDs after a sentence inside claim text.
+
+20. NEVER write evidence IDs as citations inside claim text.
+
+21. NEVER write evidence IDs such as:
+    EV-REACTION-001
+    EV-REACTION-TOP-001
+    EV-REACTION-TOP-002
+    EV-REACTION-SERIOUS-001
+    EV-OUTCOME-001
+
+    inside the "text" field.
+
+22. Evidence IDs are identifiers, not factual statistics.
+    Their numeric suffixes must NOT appear in claim text.
+
+23. The "text" field must contain ONLY the grounded factual
+    statement.
+
+24. The "evidence_ids" field is the ONLY place where evidence
+    IDs should be provided.
+
+============================================================
+NUMERIC GROUNDING RULES
+============================================================
+
+25. Every number in a claim must appear explicitly in the
+    supplied evidence.
+
+26. Do NOT calculate, infer, round, estimate, or derive new
+    numeric values.
+
+27. Do NOT introduce unsupported thresholds.
+
+28. Do NOT introduce unsupported percentages.
+
+29. Do NOT introduce unsupported counts.
+
+30. Do NOT convert textual rankings into numeric rankings.
+
+31. Preserve all supplied numerical values exactly.
+
+32. Do NOT introduce numeric values merely to describe the
+    number of evidence items.
+
+33. Words such as "top five" are acceptable only when the
+    supplied evidence itself establishes that ranking.
+
+34. Never write:
+    "(EV-REACTION-001)"
+    "(EV-REACTION-TOP-001, EV-REACTION-TOP-002)"
+    or any similar evidence-ID notation inside claim text.
+
+============================================================
+OUTPUT REQUIREMENTS
+============================================================
+
+35. Return ONLY valid JSON.
+
+36. Do NOT use Markdown code fences.
+
+37. Do NOT add commentary before or after the JSON.
+
+38. Use exactly this structure:
+
+{{
+    "section": "safety_findings",
+    "claims": [
+        {{
+            "text": "grounded factual statement",
+            "evidence_ids": [
+                "EV-REACTION-..."
+            ]
+        }}
+    ]
+}}
 """
 
     return (
@@ -205,6 +334,132 @@ STRICT REQUIREMENTS:
         + "\n\n"
         + prompt
     )
+
+
+# =============================================================
+# DETERMINISTIC CLAIM CLEANUP
+# =============================================================
+
+def strip_evidence_ids_from_claim_text(
+    generated: dict,
+    allowed_evidence_ids: set[str],
+) -> dict:
+    """
+    Remove evidence IDs accidentally inserted into claim text.
+
+    This is a deterministic safety layer.
+
+    Example:
+
+        "The dataset contained 3,429 records
+         (EV-REACTION-001)."
+
+    becomes:
+
+        "The dataset contained 3,429 records."
+
+    Evidence IDs remain untouched inside the
+    "evidence_ids" arrays.
+
+    This prevents the numeric validator from interpreting
+    identifiers such as "-001" as factual numbers.
+    """
+
+    if not isinstance(generated, dict):
+        return generated
+
+    claims = generated.get("claims")
+
+    if not isinstance(claims, list):
+        return generated
+
+    # ---------------------------------------------------------
+    # Build one safe regex from approved evidence IDs.
+    # ---------------------------------------------------------
+
+    escaped_ids = [
+        re.escape(evidence_id)
+        for evidence_id in allowed_evidence_ids
+    ]
+
+    if not escaped_ids:
+        return generated
+
+    evidence_pattern = re.compile(
+        r"\b(?:"
+        + "|".join(escaped_ids)
+        + r")\b",
+        flags=re.IGNORECASE,
+    )
+
+    for claim in claims:
+
+        if not isinstance(claim, dict):
+            continue
+
+        text = claim.get("text")
+
+        if not isinstance(text, str):
+            continue
+
+        # -----------------------------------------------------
+        # Remove evidence IDs from claim text.
+        # -----------------------------------------------------
+
+        cleaned = evidence_pattern.sub(
+            "",
+            text,
+        )
+
+        # -----------------------------------------------------
+        # Clean common formatting left behind after removal.
+        # -----------------------------------------------------
+
+        cleaned = re.sub(
+            r"\(\s*,\s*",
+            "(",
+            cleaned,
+        )
+
+        cleaned = re.sub(
+            r",\s*\)",
+            ")",
+            cleaned,
+        )
+
+        cleaned = re.sub(
+            r"\(\s*\)",
+            "",
+            cleaned,
+        )
+
+        cleaned = re.sub(
+            r"\s{2,}",
+            " ",
+            cleaned,
+        )
+
+        cleaned = re.sub(
+            r"\s+([,.;:])",
+            r"\1",
+            cleaned,
+        )
+
+        cleaned = re.sub(
+            r"([(\[])\s+",
+            r"\1",
+            cleaned,
+        )
+
+        cleaned = re.sub(
+            r"\s+([)\]])",
+            r"\1",
+            cleaned,
+        )
+
+        claim["text"] = cleaned.strip()
+
+    return generated
 
 
 # =============================================================
@@ -240,7 +495,7 @@ def generate_safety_findings():
     # ---------------------------------------------------------
 
     print(
-        "[2/6] Normalizing cases..."
+        "\n[2/6] Normalizing cases..."
     )
 
     cases_df = normalize_cases(
@@ -257,7 +512,7 @@ def generate_safety_findings():
     # ---------------------------------------------------------
 
     print(
-        "[3/6] Building evidence pack..."
+        "\n[3/6] Building evidence pack..."
     )
 
     evidence = build_evidence_pack(
@@ -273,7 +528,7 @@ def generate_safety_findings():
     # ---------------------------------------------------------
 
     print(
-        "[4/6] Building evidence registry..."
+        "\n[4/6] Building evidence registry..."
     )
 
     registry = create_evidence_registry(
@@ -290,7 +545,7 @@ def generate_safety_findings():
     # ---------------------------------------------------------
 
     print(
-        "[5/6] Building Safety Findings-specific context..."
+        "\n[5/6] Building Safety Findings-specific context..."
     )
 
     context = build_safety_findings_context(
@@ -308,6 +563,7 @@ def generate_safety_findings():
     )
 
     for evidence_id in safety_evidence:
+
         print(
             f"        {evidence_id}"
         )
@@ -318,11 +574,11 @@ def generate_safety_findings():
     )
 
     # ---------------------------------------------------------
-    # 6. GENERATE WITH GEMINI
+    # 6. GENERATE WITH GEMINI / GROQ FALLBACK
     # ---------------------------------------------------------
 
     print(
-        "[6/6] Generating grounded Safety Findings..."
+        "\n[6/6] Generating grounded Safety Findings..."
     )
 
     client = GeminiClient()
@@ -335,12 +591,36 @@ def generate_safety_findings():
     )
 
     # ---------------------------------------------------------
-    # DISPLAY RAW GENERATION
+    # DETERMINISTIC POST-PROCESSING
     # ---------------------------------------------------------
 
-    print("\n" + "=" * 70)
-    print("GENERATED SAFETY FINDINGS")
-    print("=" * 70)
+    print(
+        "\n      Applying deterministic evidence-ID cleanup..."
+    )
+
+    generated = strip_evidence_ids_from_claim_text(
+        generated=generated,
+        allowed_evidence_ids=set(
+            safety_evidence.keys()
+        ),
+    )
+
+    # ---------------------------------------------------------
+    # DISPLAY RAW / CLEANED GENERATION
+    # ---------------------------------------------------------
+
+    print(
+        "\n"
+        + "=" * 70
+    )
+
+    print(
+        "GENERATED SAFETY FINDINGS"
+    )
+
+    print(
+        "=" * 70
+    )
 
     print(
         json.dumps(
@@ -354,9 +634,18 @@ def generate_safety_findings():
     # VALIDATE
     # ---------------------------------------------------------
 
-    print("\n" + "=" * 70)
-    print("EVIDENCE VALIDATION")
-    print("=" * 70)
+    print(
+        "\n"
+        + "=" * 70
+    )
+
+    print(
+        "EVIDENCE VALIDATION"
+    )
+
+    print(
+        "=" * 70
+    )
 
     validation = validate_generated_section(
         generated,
@@ -368,11 +657,15 @@ def generate_safety_findings():
 
     if validation["valid"]:
 
-        print("STATUS: PASS")
+        print(
+            "STATUS: PASS"
+        )
 
     else:
 
-        print("STATUS: FAIL")
+        print(
+            "STATUS: FAIL"
+        )
 
         for error in validation[
             "errors"
@@ -386,9 +679,18 @@ def generate_safety_findings():
     # CLAIM DETAILS
     # ---------------------------------------------------------
 
-    print("\n" + "=" * 70)
-    print("CLAIM VALIDATION DETAILS")
-    print("=" * 70)
+    print(
+        "\n"
+        + "=" * 70
+    )
+
+    print(
+        "CLAIM VALIDATION DETAILS"
+    )
+
+    print(
+        "=" * 70
+    )
 
     for item in validation[
         "evidence_validation"
@@ -426,9 +728,18 @@ def generate_safety_findings():
     # NUMERIC VALIDATION
     # ---------------------------------------------------------
 
-    print("\n" + "=" * 70)
-    print("NUMERIC VALIDATION")
-    print("=" * 70)
+    print(
+        "\n"
+        + "=" * 70
+    )
+
+    print(
+        "NUMERIC VALIDATION"
+    )
+
+    print(
+        "=" * 70
+    )
 
     for item in validation[
         "number_validation"
@@ -464,11 +775,57 @@ def generate_safety_findings():
                 f"{item['unsupported_numbers']}"
             )
 
+        # ---------------------------------------------------------
+    # SAVE VALIDATED SECTION
+    # ---------------------------------------------------------
+
+    if validation["valid"]:
+
+        output_dir = BASE_DIR / "outputs" / "sections"
+        output_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        output_path = (
+            output_dir / "safety_findings.json"
+        )
+
+        section_output = {
+            "section": "safety_findings",
+            "claims": generated.get(
+                "claims",
+                [],
+            ),
+            "validation": validation,
+        }
+
+        with open(
+            output_path,
+            "w",
+            encoding="utf-8",
+        ) as f:
+
+            json.dump(
+                section_output,
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
+
+        print(
+            f"\n      Saved validated section: "
+            f"{output_path}"
+        )
+
     # ---------------------------------------------------------
     # FINAL STATUS
     # ---------------------------------------------------------
 
-    print("\n" + "=" * 70)
+    print(
+        "\n"
+        + "=" * 70
+    )
 
     if validation["valid"]:
 
@@ -484,10 +841,16 @@ def generate_safety_findings():
             "SAFETY FINDINGS VALIDATION FAILED"
         )
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
     return {
-        "generated": generated,
+        "section": "safety_findings",
+        "claims": generated.get(
+            "claims",
+            [],
+        ),
         "validation": validation,
     }
 

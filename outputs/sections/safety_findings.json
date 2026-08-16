@@ -1,0 +1,94 @@
+{
+  "section": "safety_findings",
+  "claims": [
+    {
+      "text": "The dataset comprised 3,429 reaction records.",
+      "evidence_ids": [
+        "EV-REACTION-001"
+      ]
+    },
+    {
+      "text": "The five most frequently reported reactions were Acute kidney injury (80 cases, 7.8%), Drug ineffective (54 cases, 5.3%), Hypotension (46 cases, 4.5%), Drug interaction (43 cases, 4.2%) and Dyspnoea (38 cases, 3.7%).",
+      "evidence_ids": [
+        "EV-REACTION-TOP-001",
+        "EV-REACTION-TOP-002",
+        "EV-REACTION-TOP-003",
+        "EV-REACTION-TOP-004",
+        "EV-REACTION-TOP-005"
+      ]
+    }
+  ],
+  "validation": {
+    "valid": true,
+    "section": "safety_findings",
+    "errors": [],
+    "evidence_validation": [
+      {
+        "claim_index": 1,
+        "claim": "The dataset comprised 3,429 reaction records.",
+        "evidence_ids": [
+          "EV-REACTION-001"
+        ],
+        "valid": true,
+        "errors": []
+      },
+      {
+        "claim_index": 2,
+        "claim": "The five most frequently reported reactions were Acute kidney injury (80 cases, 7.8%), Drug ineffective (54 cases, 5.3%), Hypotension (46 cases, 4.5%), Drug interaction (43 cases, 4.2%) and Dyspnoea (38 cases, 3.7%).",
+        "evidence_ids": [
+          "EV-REACTION-TOP-001",
+          "EV-REACTION-TOP-002",
+          "EV-REACTION-TOP-003",
+          "EV-REACTION-TOP-004",
+          "EV-REACTION-TOP-005"
+        ],
+        "valid": true,
+        "errors": []
+      }
+    ],
+    "number_validation": [
+      {
+        "claim_index": 1,
+        "claim": "The dataset comprised 3,429 reaction records.",
+        "claim_numbers": [
+          3429.0
+        ],
+        "supported_numbers": [
+          3429.0
+        ],
+        "unsupported_numbers": [],
+        "valid": true
+      },
+      {
+        "claim_index": 2,
+        "claim": "The five most frequently reported reactions were Acute kidney injury (80 cases, 7.8%), Drug ineffective (54 cases, 5.3%), Hypotension (46 cases, 4.5%), Drug interaction (43 cases, 4.2%) and Dyspnoea (38 cases, 3.7%).",
+        "claim_numbers": [
+          80.0,
+          7.8,
+          54.0,
+          5.3,
+          46.0,
+          4.5,
+          43.0,
+          4.2,
+          38.0,
+          3.7
+        ],
+        "supported_numbers": [
+          3.7,
+          4.2,
+          4.5,
+          5.3,
+          7.8,
+          38.0,
+          43.0,
+          46.0,
+          54.0,
+          80.0
+        ],
+        "unsupported_numbers": [],
+        "valid": true
+      }
+    ]
+  }
+}

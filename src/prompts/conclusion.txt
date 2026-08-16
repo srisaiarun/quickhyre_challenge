@@ -1,8 +1,8 @@
 Write the CONCLUSION section of the pharmacovigilance report.
 
-Use only the supplied evidence.
+Use ONLY the supplied evidence.
 
-Summarize:
+Summarize the following:
 
 - overall case volume
 - seriousness
@@ -18,19 +18,171 @@ Do not declare a safety signal.
 
 Do not make an expectedness determination.
 
-The conclusion should summarize observed evidence rather than
-introduce new analysis.
+Do not infer clinical risk.
 
-Return JSON with exactly this structure:
+Do not introduce new analysis.
+
+The conclusion must summarize observed evidence only.
+
+============================================================
+CRITICAL OUTPUT REQUIREMENTS
+============================================================
+
+Return JSON with EXACTLY this structure:
 
 {
   "section": "conclusion",
   "claims": [
     {
-      "text": "...",
+      "text": "grounded factual statement",
       "evidence_ids": ["EV-..."]
     }
   ]
 }
 
-Every factual claim MUST have at least one evidence ID.
+Every factual claim MUST contain at least one evidence ID.
+
+Evidence IDs MUST be copied exactly from the supplied evidence.
+
+Use ONLY approved evidence supplied in the section context.
+
+============================================================
+STRICT NUMERIC GROUNDING
+============================================================
+
+1. Every numeric value in a claim MUST appear explicitly in the supplied evidence.
+
+2. Do NOT calculate any new number.
+
+3. Do NOT calculate percentages from case counts.
+
+4. Do NOT derive percentages.
+
+5. Do NOT round numbers.
+
+6. Do NOT estimate numbers.
+
+7. Do NOT introduce a numeric threshold that is not explicitly present
+   in the supplied evidence.
+
+8. Preserve numerical values exactly as supplied.
+
+============================================================
+CRITICAL DATE RULE
+============================================================
+
+DO NOT include ANY calendar dates or date components in generated claims.
+
+This means:
+
+- NEVER write a year such as 2024 or 2025.
+- NEVER write a month name together with a year.
+- NEVER write a day number.
+- NEVER write a date range.
+- NEVER write dates in formats such as:
+  "13 Feb 2025"
+  "23 Oct 2025"
+  "13-27 Feb 2025"
+  "2025-02-13"
+- NEVER reproduce the dates contained in temporal evidence.
+
+The numeric validator interprets date components as analytical numbers.
+
+Therefore, temporal findings MUST be expressed without dates.
+
+============================================================
+TEMPORAL EVIDENCE RULE
+============================================================
+
+When summarizing temporal observations:
+
+- Use qualitative wording where possible.
+- If a case count is explicitly supported by temporal evidence,
+  the case count MAY be included.
+- Do NOT include the corresponding date.
+- Do NOT include "15-day" or any other numeric duration.
+- Do NOT include numeric day ranges.
+- Do NOT include numeric years.
+
+VALID examples:
+
+"Temporal analysis identified the highest observed case volume
+in a calendar month, with 109 cases."
+
+"Several analyzed temporal windows showed elevated case counts,
+including windows with 61, 60, 59, and 57 cases."
+
+INVALID examples:
+
+"The highest month was July 2025, with 109 cases."
+
+"Several 15-day windows showed elevated case counts,
+including 13 Feb 2025–27 Feb 2025 (61 cases)."
+
+"13 Feb 2025–27 Feb 2025 had 61 cases."
+
+The VALID examples contain only numeric values that are actual
+analytical case counts.
+
+============================================================
+LEADING REACTIONS
+============================================================
+
+When describing leading reported reactions:
+
+- Use only reaction names explicitly supplied in the evidence.
+- Use only their explicitly supplied case counts and percentages.
+- Do not calculate rankings.
+- Do not calculate additional percentages.
+- Do not infer causality.
+- Do not describe reactions as caused by the product.
+
+============================================================
+SERIOUSNESS
+============================================================
+
+Describe seriousness exactly as supported by the evidence.
+
+Do not convert case counts into percentages unless the exact
+percentage is explicitly supplied in the evidence.
+
+Do not infer severity beyond the supplied evidence.
+
+============================================================
+LIMITATIONS
+============================================================
+
+Describe only limitations explicitly supported by the evidence.
+
+Do not add generic limitations.
+
+Do not claim that missing information exists unless the supplied
+limitation evidence explicitly states it.
+
+============================================================
+FINAL SELF-CHECK BEFORE RETURNING JSON
+============================================================
+
+Before returning the JSON, verify every claim:
+
+1. Every factual claim has at least one evidence ID.
+2. Every evidence ID exists in the supplied approved evidence.
+3. Every number appears explicitly in the cited evidence.
+4. There are NO calendar dates.
+5. There are NO years.
+6. There are NO day numbers from date ranges.
+7. There are NO numeric duration labels such as "15-day".
+8. There are NO calculated percentages.
+9. There are NO unsupported thresholds such as "less than 6%".
+10. There are NO causal statements.
+11. There is NO safety-signal determination.
+12. There is NO expectedness determination.
+13. The output is ONLY valid JSON.
+14. Do not use markdown fences.
+15. Do not add commentary before or after the JSON.
+
+If a temporal observation cannot be expressed without introducing
+a date or unsupported number, omit the date and describe the
+observation qualitatively instead.
+
+Return ONLY the required JSON.

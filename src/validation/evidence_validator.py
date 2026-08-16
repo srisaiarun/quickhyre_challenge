@@ -187,6 +187,185 @@ def _is_year(
         return False
 
     return 1900 <= value <= 2100
+# =============================================================
+# DEMOGRAPHIC AGE CATEGORY DETECTION
+# =============================================================
+
+def _is_demographic_category_number(
+    number_text: str,
+    full_text: str,
+    match_start: int,
+    match_end: int,
+) -> bool:
+    """
+    Return True when a numeric token is part of a demographic
+    age-category label rather than an analytical statistic.
+
+    Supported age-category forms include:
+
+        75+
+        65-74
+        65‑74
+        45–64
+        18-44
+        <18
+        >75
+        75 years and older
+        age group 65-74
+
+    The function deliberately supports several Unicode dash
+    characters because LLM output may use a non-ASCII hyphen
+    such as U+2011 (non-breaking hyphen) or U+2013 (en dash).
+
+    Analytical values such as:
+
+        409 cases
+        43.5%
+        78.8 cases
+        -41.3%
+
+    are not treated as demographic category boundaries.
+    """
+
+    before = full_text[
+        max(0, match_start - 40):
+        match_start
+    ]
+
+    after = full_text[
+        match_end:
+        min(len(full_text), match_end + 40)
+    ]
+
+    context = (
+        before + number_text + after
+    ).lower()
+
+    # ---------------------------------------------------------
+    # Explicit age wording.
+    # ---------------------------------------------------------
+
+    age_context = bool(
+        re.search(
+            r"\bage(?:\s+group|\s+category)?\b",
+            context,
+        )
+        or re.search(
+            r"\byears?\s+(?:and\s+)?(?:older|younger)\b",
+            context,
+        )
+        or re.search(
+            r"\byears?\s*(?:old)?\b",
+            context,
+        )
+    )
+
+    # ---------------------------------------------------------
+    # Explicit inequality age categories.
+    #
+    #     <18
+    #     >75
+    # ---------------------------------------------------------
+
+    immediate_before = before.rstrip()
+
+    if immediate_before.endswith("<") or immediate_before.endswith(">"):
+        return True
+
+    # ---------------------------------------------------------
+    # Plus age category.
+    #
+    #     75+
+    # ---------------------------------------------------------
+
+    immediate_after = after.lstrip()
+
+    if immediate_after.startswith("+"):
+        return True
+
+    # ---------------------------------------------------------
+    # Unicode-aware age-range detection.
+    #
+    # Supported range separators:
+    #
+    #     -   ASCII hyphen-minus
+    #     ‐   U+2010 hyphen
+    #     ‑   U+2011 non-breaking hyphen
+    #     ‒   U+2012 figure dash
+    #     –   U+2013 en dash
+    #     —   U+2014 em dash
+    #
+    # This is important because generated text may contain:
+    #
+    #     18-44
+    #     18‑44
+    #     18–44
+    #
+    # Both bounds are ignored because they are category labels,
+    # not analytical statistics.
+    # ---------------------------------------------------------
+
+    RANGE_DASHES = r"\-‐‑‒–—"
+
+    # Number is the LOWER bound:
+    #     18-44
+    #     18‑44
+    #     18–44
+    next_match = re.match(
+        rf"^[{RANGE_DASHES}]\s*(\d{{1,3}})\b",
+        immediate_after,
+    )
+
+    if next_match:
+        try:
+            lower = int(
+                number_text.replace(",", "")
+            )
+            upper = int(
+                next_match.group(1)
+            )
+        except ValueError:
+            return False
+
+        plausible_age_range = (
+            0 <= lower <= 120
+            and 0 <= upper <= 120
+            and lower < upper
+        )
+
+        if age_context or plausible_age_range:
+            return True
+
+    # Number is the UPPER bound:
+    #     18-44
+    #     18‑44
+    #     18–44
+    previous_match = re.search(
+        rf"(\d{{1,3}})\s*[{RANGE_DASHES}]\s*$",
+        immediate_before,
+    )
+
+    if previous_match:
+        try:
+            lower = int(
+                previous_match.group(1)
+            )
+            upper = int(
+                number_text.replace(",", "")
+            )
+        except ValueError:
+            return False
+
+        plausible_age_range = (
+            0 <= lower <= 120
+            and 0 <= upper <= 120
+            and lower < upper
+        )
+
+        if age_context or plausible_age_range:
+            return True
+
+    return False
 
 
 # =============================================================
@@ -205,6 +384,8 @@ def _extract_meaningful_numbers(
     - ISO dates such as 2025-02-13
     - written dates such as February 13, 2025
     - calendar years
+    - demographic age-category boundaries such as 18-44,
+      18‑44, 45-64, 65-74, 75+, <18, and >75
     - the 15 in "15-day window"
 
     Keeps actual analytical values such as:
@@ -236,6 +417,27 @@ def _extract_meaningful_numbers(
     for match in matches:
 
         raw = match.group(0)
+                # -----------------------------------------------------
+        # Ignore demographic age-category boundaries.
+        #
+        # Examples:
+        #     75+
+        #     65-74
+        #     45-64
+        #     18-44
+        #     <18
+        #     >75
+        #
+        # These are category labels, not analytical values.
+        # -----------------------------------------------------
+
+        if _is_demographic_category_number(
+            raw,
+            masked_text,
+            match.start(),
+            match.end(),
+        ):
+            continue
 
         # -----------------------------------------------------
         # Ignore calendar years.

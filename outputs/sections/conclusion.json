@@ -1,0 +1,121 @@
+{
+  "section": "conclusion",
+  "claims": [
+    {
+      "text": "The reporting period included a total of 1,024 canonical cases.",
+      "evidence_ids": [
+        "EV-CASE-001"
+      ]
+    },
+    {
+      "text": "Of these, 1,023 cases were classified as serious.",
+      "evidence_ids": [
+        "EV-CASE-002"
+      ]
+    },
+    {
+      "text": "The most frequently reported reactions were Acute kidney injury (80 cases, 7.8%), Drug ineffective (54 cases, 5.3%), Hypotension (46 cases, 4.5%), Drug interaction (43 cases, 4.2%), and Dyspnoea (38 cases, 3.7%).",
+      "evidence_ids": [
+        "EV-REACTION-TOP-001",
+        "EV-REACTION-TOP-002",
+        "EV-REACTION-TOP-003",
+        "EV-REACTION-TOP-004",
+        "EV-REACTION-TOP-005"
+      ]
+    }
+  ],
+  "validation": {
+    "valid": true,
+    "section": "conclusion",
+    "errors": [],
+    "evidence_validation": [
+      {
+        "claim_index": 1,
+        "claim": "The reporting period included a total of 1,024 canonical cases.",
+        "evidence_ids": [
+          "EV-CASE-001"
+        ],
+        "valid": true,
+        "errors": []
+      },
+      {
+        "claim_index": 2,
+        "claim": "Of these, 1,023 cases were classified as serious.",
+        "evidence_ids": [
+          "EV-CASE-002"
+        ],
+        "valid": true,
+        "errors": []
+      },
+      {
+        "claim_index": 3,
+        "claim": "The most frequently reported reactions were Acute kidney injury (80 cases, 7.8%), Drug ineffective (54 cases, 5.3%), Hypotension (46 cases, 4.5%), Drug interaction (43 cases, 4.2%), and Dyspnoea (38 cases, 3.7%).",
+        "evidence_ids": [
+          "EV-REACTION-TOP-001",
+          "EV-REACTION-TOP-002",
+          "EV-REACTION-TOP-003",
+          "EV-REACTION-TOP-004",
+          "EV-REACTION-TOP-005"
+        ],
+        "valid": true,
+        "errors": []
+      }
+    ],
+    "number_validation": [
+      {
+        "claim_index": 1,
+        "claim": "The reporting period included a total of 1,024 canonical cases.",
+        "claim_numbers": [
+          1024.0
+        ],
+        "supported_numbers": [
+          1024.0
+        ],
+        "unsupported_numbers": [],
+        "valid": true
+      },
+      {
+        "claim_index": 2,
+        "claim": "Of these, 1,023 cases were classified as serious.",
+        "claim_numbers": [
+          1023.0
+        ],
+        "supported_numbers": [
+          1023.0
+        ],
+        "unsupported_numbers": [],
+        "valid": true
+      },
+      {
+        "claim_index": 3,
+        "claim": "The most frequently reported reactions were Acute kidney injury (80 cases, 7.8%), Drug ineffective (54 cases, 5.3%), Hypotension (46 cases, 4.5%), Drug interaction (43 cases, 4.2%), and Dyspnoea (38 cases, 3.7%).",
+        "claim_numbers": [
+          80.0,
+          7.8,
+          54.0,
+          5.3,
+          46.0,
+          4.5,
+          43.0,
+          4.2,
+          38.0,
+          3.7
+        ],
+        "supported_numbers": [
+          3.7,
+          4.2,
+          4.5,
+          5.3,
+          7.8,
+          38.0,
+          43.0,
+          46.0,
+          54.0,
+          80.0
+        ],
+        "unsupported_numbers": [],
+        "valid": true
+      }
+    ]
+  }
+}

@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
-import json
 
 
 # =============================================================
-# IMPORT PATH
+# PROJECT PATH
 # =============================================================
 
-SRC_DIR = Path(__file__).resolve().parents[1]
+BASE_DIR = Path(__file__).resolve().parents[2]
+SRC_DIR = BASE_DIR / "src"
 
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
@@ -31,7 +32,7 @@ from evidence.evidence_registry import (
 )
 
 from context.context_builder import (
-    build_trends_context,
+    build_safety_findings_context,
 )
 
 from llm.client import (
@@ -42,57 +43,13 @@ from validation.evidence_validator import (
     validate_generated_section,
 )
 
-
 # =============================================================
 # PATHS
 # =============================================================
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+
 
 PROMPTS_DIR = BASE_DIR / "src" / "prompts"
-
-# =============================================================
-# SECTION OUTPUT PATH
-# =============================================================
-
-SECTION_OUTPUT_DIR = (
-    BASE_DIR
-    / "outputs"
-    / "sections"
-)
-
-SECTION_OUTPUT_DIR.mkdir(
-    parents=True,
-    exist_ok=True,
-)
-
-
-def save_section_output(
-    result: dict,
-    filename: str,
-) -> Path:
-    """
-    Save a validated section result to outputs/sections.
-    """
-
-    output_path = (
-        SECTION_OUTPUT_DIR
-        / filename
-    )
-
-    with open(
-        output_path,
-        "w",
-        encoding="utf-8",
-    ) as f:
-        json.dump(
-            result,
-            f,
-            indent=2,
-            ensure_ascii=False,
-        )
-
-    return output_path
 
 
 # =============================================================
@@ -120,43 +77,38 @@ def load_prompt(filename: str) -> str:
 # EVIDENCE SELECTION
 # =============================================================
 
-def build_trends_evidence(
+def build_safety_findings_evidence(
     registry: dict,
 ) -> dict:
     """
-    Select only the most relevant evidence for the
-    Temporal Trends section.
+    Select a compact, high-value evidence set for the
+    Safety Findings section.
 
-    The LLM receives:
-        - highest-volume month
-        - lowest-volume month
-        - monthly trend summary evidence
-        - top observed high-volume windows
-
-    The complete evidence registry remains available for
-    deterministic validation, but only approved trend
-    evidence is supplied to the LLM.
+    The LLM receives the leading observed reactions,
+    leading serious reactions, and outcome distribution.
     """
 
     required_ids = [
-        # -----------------------------------------------------
-        # Monthly trend evidence
-        # -----------------------------------------------------
+        # Reaction metadata
+        "EV-REACTION-001",
+        "EV-REACTION-002",
 
-        "EV-TREND-001",
-        "EV-TREND-002",
-        "EV-TREND-003",
-        "EV-TREND-004",
+        # Top 5 reactions
+        "EV-REACTION-TOP-001",
+        "EV-REACTION-TOP-002",
+        "EV-REACTION-TOP-003",
+        "EV-REACTION-TOP-004",
+        "EV-REACTION-TOP-005",
 
-        # -----------------------------------------------------
-        # High-volume window observations
-        # -----------------------------------------------------
+        # Top 5 serious reactions
+        "EV-REACTION-SERIOUS-001",
+        "EV-REACTION-SERIOUS-002",
+        "EV-REACTION-SERIOUS-003",
+        "EV-REACTION-SERIOUS-004",
+        "EV-REACTION-SERIOUS-005",
 
-        "EV-TREND-15D-001",
-        "EV-TREND-15D-002",
-        "EV-TREND-15D-003",
-        "EV-TREND-15D-004",
-        "EV-TREND-15D-005",
+        # Outcomes
+        "EV-OUTCOME-001",
     ]
 
     selected = {}
@@ -165,7 +117,7 @@ def build_trends_evidence(
 
         if evidence_id not in registry:
             raise KeyError(
-                f"Required trend evidence ID missing: "
+                f"Required evidence ID missing: "
                 f"{evidence_id}"
             )
 
@@ -180,24 +132,23 @@ def build_trends_evidence(
 # BUILD LLM PROMPT
 # =============================================================
 
-def build_trends_prompt(
+def build_safety_findings_prompt(
     context: dict,
     evidence: dict,
 ) -> str:
     """
-    Build the grounded Temporal Trends prompt.
+    Build the grounded Safety Findings prompt.
 
-    Gemini/Groq receives:
+    Gemini receives:
 
-        1. System instructions
-        2. Section-specific prompt
-        3. Approved evidence
-        4. Section context
-        5. Explicit grounding constraints
+    1. System instructions
+    2. Section instructions
+    3. Approved evidence
+    4. Section-specific context
     """
 
-    trends_prompt = load_prompt(
-        "trends.txt"
+    safety_prompt = load_prompt(
+        "safety_findings.txt"
     )
 
     system_prompt = load_prompt(
@@ -205,18 +156,14 @@ def build_trends_prompt(
     )
 
     prompt = f"""
-{trends_prompt}
+{safety_prompt}
 
-============================================================
-IMPORTANT GROUNDING REQUIREMENTS
-============================================================
+IMPORTANT GROUNDING REQUIREMENTS:
 
 The following evidence IDs are the ONLY approved
 sources for factual claims in this response.
 
-============================================================
-APPROVED TEMPORAL EVIDENCE
-============================================================
+APPROVED EVIDENCE:
 
 {json.dumps(
     evidence,
@@ -224,9 +171,7 @@ APPROVED TEMPORAL EVIDENCE
     ensure_ascii=False,
 )}
 
-============================================================
-SECTION CONTEXT
-============================================================
+SECTION CONTEXT:
 
 {json.dumps(
     context,
@@ -234,120 +179,47 @@ SECTION CONTEXT
     ensure_ascii=False,
 )}
 
-============================================================
-STRICT REQUIREMENTS
-============================================================
+STRICT REQUIREMENTS:
 
 - Use only the approved evidence above.
-
-- Every factual claim must cite one or more
-  approved evidence IDs.
-
-- Preserve numerical values exactly.
-
+- Every factual claim MUST cite one or more evidence IDs.
+- Preserve numerical values exactly as supplied.
 - Do not calculate new statistics.
-
-- Do not invent dates or case counts.
-
-- Do not call any temporal pattern a safety signal.
-
+- Do not invent information.
+- Do not claim bisoprolol caused any reaction.
 - Do not establish causality.
-
-- Do not infer clinical risk.
-
-- Treat high-volume reporting windows as
-  descriptive observations only.
-
-- State that high-volume observations require
-  human review and contextual assessment.
-
-- Keep the response concise.
-
-- Prefer 3 to 6 claims.
-
-- Return only the required JSON structure.
-
-============================================================
-NUMERIC GROUNDING RULES
-============================================================
-
-- Every number appearing in a claim must be explicitly
-  supported by the supplied evidence.
-
-- Do not calculate, derive, estimate, round, or infer
-  any new number.
-
-- Do not include calendar dates in claim text.
-
-- Do not include date ranges in claim text.
-
-- Do not write dates such as "13 Feb 2025",
-  "27 Feb 2025", "23 Oct 2025", or similar.
-
-- Do not describe windows using "15-day" or "15 day".
-
-- Calendar-date components and duration values are treated
-  as numeric values by the downstream validator.
-
-- When discussing high-volume windows, describe them
-  without dates or duration numbers.
-
-- For example, write:
-
-  "The highest-volume observed window contained 61 cases."
-
-- Do not write:
-
-  "The highest-volume 15-day window from 13 Feb 2025
-   to 27 Feb 2025 contained 61 cases."
-
-- Qualitative descriptions are preferred when a numeric
-  value is not explicitly supported.
-
-- Do not introduce thresholds such as "less than 6%"
-  unless that exact threshold appears in the evidence.
-
-- Preserve statistical values exactly as supplied.
-
-============================================================
-REQUIRED OUTPUT STRUCTURE
-============================================================
-
-Return ONLY:
-
-{{
-  "section": "trends",
-  "claims": [
-    {{
-      "text": "grounded factual statement",
-      "evidence_ids": [
-        "EV-TREND-..."
-      ]
-    }}
-  ]
-}}
+- Do not call any reaction a confirmed safety signal.
+- Do not infer expectedness.
+- Describe reaction frequencies as observed reporting data.
+- Describe outcomes as observed reporting data.
+- If discussing high-frequency reactions, describe them as
+  observed frequencies/rankings only.
+- If discussing serious reactions, describe them as
+  serious reaction findings in the supplied dataset.
+- Do not make clinical risk conclusions.
+- Return ONLY the required JSON structure.
 """
 
     return (
         system_prompt
         + "\n\n"
-        + prompt.strip()
+        + prompt
     )
 
 
 # =============================================================
-# GENERATE TRENDS
+# GENERATE SAFETY FINDINGS
 # =============================================================
 
-def generate_trends():
+def generate_safety_findings():
     """
-    Execute the complete grounded Temporal Trends
+    Execute the complete grounded Safety Findings
     generation pipeline.
     """
 
     print("=" * 70)
     print(
-        "GENAR — GROUNDED TEMPORAL TRENDS GENERATION"
+        "GENAR — GROUNDED SAFETY FINDINGS GENERATION"
     )
     print("=" * 70)
 
@@ -414,42 +286,43 @@ def generate_trends():
     )
 
     # ---------------------------------------------------------
-    # 5. BUILD TRENDS CONTEXT
+    # 5. BUILD SECTION CONTEXT
     # ---------------------------------------------------------
 
     print(
-        "[5/6] Building Temporal Trends-specific "
-        "context..."
+        "[5/6] Building Safety Findings-specific context..."
     )
 
-    context = build_trends_context(
+    context = build_safety_findings_context(
         evidence
     )
 
-    trends_evidence = build_trends_evidence(
-        registry
+    safety_evidence = (
+        build_safety_findings_evidence(
+            registry
+        )
     )
 
     print(
-        "      Approved Temporal Trends evidence:"
+        "      Approved Safety Findings evidence:"
     )
 
-    for evidence_id in trends_evidence:
+    for evidence_id in safety_evidence:
         print(
             f"        {evidence_id}"
         )
 
-    prompt = build_trends_prompt(
+    prompt = build_safety_findings_prompt(
         context=context,
-        evidence=trends_evidence,
+        evidence=safety_evidence,
     )
 
     # ---------------------------------------------------------
-    # 6. GENERATE WITH GEMINI / GROQ FALLBACK
+    # 6. GENERATE WITH GEMINI
     # ---------------------------------------------------------
 
     print(
-        "[6/6] Generating grounded Temporal Trends..."
+        "[6/6] Generating grounded Safety Findings..."
     )
 
     client = GeminiClient()
@@ -462,13 +335,11 @@ def generate_trends():
     )
 
     # ---------------------------------------------------------
-    # DISPLAY GENERATED RESULT
+    # DISPLAY RAW GENERATION
     # ---------------------------------------------------------
 
     print("\n" + "=" * 70)
-    print(
-        "GENERATED TEMPORAL TRENDS"
-    )
+    print("GENERATED SAFETY FINDINGS")
     print("=" * 70)
 
     print(
@@ -484,32 +355,28 @@ def generate_trends():
     # ---------------------------------------------------------
 
     print("\n" + "=" * 70)
-    print(
-        "EVIDENCE VALIDATION"
-    )
+    print("EVIDENCE VALIDATION")
     print("=" * 70)
 
     validation = validate_generated_section(
         generated,
         registry,
         allowed_evidence_ids=set(
-            trends_evidence.keys()
+            safety_evidence.keys()
         ),
     )
 
     if validation["valid"]:
 
-        print(
-            "STATUS: PASS"
-        )
+        print("STATUS: PASS")
 
     else:
 
-        print(
-            "STATUS: FAIL"
-        )
+        print("STATUS: FAIL")
 
-        for error in validation["errors"]:
+        for error in validation[
+            "errors"
+        ]:
 
             print(
                 f"ERROR: {error}"
@@ -520,9 +387,7 @@ def generate_trends():
     # ---------------------------------------------------------
 
     print("\n" + "=" * 70)
-    print(
-        "CLAIM VALIDATION DETAILS"
-    )
+    print("CLAIM VALIDATION DETAILS")
     print("=" * 70)
 
     for item in validation[
@@ -562,9 +427,7 @@ def generate_trends():
     # ---------------------------------------------------------
 
     print("\n" + "=" * 70)
-    print(
-        "NUMERIC VALIDATION"
-    )
+    print("NUMERIC VALIDATION")
     print("=" * 70)
 
     for item in validation[
@@ -602,35 +465,6 @@ def generate_trends():
             )
 
     # ---------------------------------------------------------
-    # BUILD FINAL RESULT
-    # ---------------------------------------------------------
-
-    result = {
-        "section": "trends",
-        "claims": generated.get(
-            "claims",
-            [],
-        ),
-        "validation": validation,
-    }
-
-    # ---------------------------------------------------------
-    # SAVE VALIDATED OUTPUT
-    # ---------------------------------------------------------
-
-    if validation["valid"]:
-
-        output_path = save_section_output(
-            result=result,
-            filename="trends.json",
-        )
-
-        print(
-            f"\n      Saved validated section:"
-            f"\n      {output_path}"
-        )
-
-    # ---------------------------------------------------------
     # FINAL STATUS
     # ---------------------------------------------------------
 
@@ -640,19 +474,22 @@ def generate_trends():
 
         print(
             "FINAL STATUS: "
-            "VALIDATED TEMPORAL TRENDS"
+            "VALIDATED SAFETY FINDINGS"
         )
 
     else:
 
         print(
             "FINAL STATUS: "
-            "TEMPORAL TRENDS VALIDATION FAILED"
+            "SAFETY FINDINGS VALIDATION FAILED"
         )
 
     print("=" * 70)
 
-    return result
+    return {
+        "generated": generated,
+        "validation": validation,
+    }
 
 
 # =============================================================
@@ -660,4 +497,4 @@ def generate_trends():
 # =============================================================
 
 if __name__ == "__main__":
-    generate_trends()
+    generate_safety_findings()

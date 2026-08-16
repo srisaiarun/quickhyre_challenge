@@ -3,41 +3,22 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 
 # =============================================================
 # PROJECT PATH SETUP
 # =============================================================
 
-# generate_overview.py is located at:
-#
-# project/
-#   src/
-#       generation/
-#           generate_overview.py
-#
-# Therefore:
-#   parents[0] = generation
-#   parents[1] = src
-#   parents[2] = project root
-
-BASE_DIR = Path(
-    __file__
-).resolve().parents[2]
+BASE_DIR = (
+    Path(__file__)
+    .resolve()
+    .parents[2]
+)
 
 SRC_DIR = BASE_DIR / "src"
 
-
-# Add src/ to Python's import path.
-#
-# This allows imports such as:
-#
-#     from data.loader import load_dataset
-#     from evidence.evidence_builder import ...
-#
-# to work when this file is executed directly.
 if str(SRC_DIR) not in sys.path:
-
     sys.path.insert(
         0,
         str(SRC_DIR),
@@ -49,7 +30,10 @@ if str(SRC_DIR) not in sys.path:
 # =============================================================
 
 from data.loader import load_dataset
-from data.case_normalizer import normalize_cases
+
+from data.case_normalizer import (
+    normalize_cases,
+)
 
 from evidence.evidence_builder import (
     build_evidence_pack,
@@ -73,7 +57,7 @@ from validation.evidence_validator import (
 
 
 # =============================================================
-# PROMPT PATH
+# PATHS
 # =============================================================
 
 PROMPTS_DIR = (
@@ -81,6 +65,33 @@ PROMPTS_DIR = (
     / "src"
     / "prompts"
 )
+
+SECTION_OUTPUT_DIR = (
+    BASE_DIR
+    / "outputs"
+    / "sections"
+)
+
+SECTION_OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True,
+)
+
+OUTPUT_PATH = (
+    SECTION_OUTPUT_DIR
+    / "overview.json"
+)
+
+
+# =============================================================
+# CONFIGURATION
+# =============================================================
+
+SECTION_NAME = "overview"
+
+TEMPERATURE = 0.0
+
+MAX_OUTPUT_TOKENS = 700
 
 
 # =============================================================
@@ -94,10 +105,12 @@ def load_prompt(
     Load a prompt file from src/prompts.
     """
 
-    path = PROMPTS_DIR / filename
+    path = (
+        PROMPTS_DIR
+        / filename
+    )
 
     if not path.exists():
-
         raise FileNotFoundError(
             f"Prompt file not found: {path}"
         )
@@ -108,6 +121,30 @@ def load_prompt(
 
 
 # =============================================================
+# COMPACT JSON
+# =============================================================
+
+def compact_json(
+    value: Any,
+) -> str:
+    """
+    Serialize JSON with minimal whitespace.
+
+    This reduces prompt size while preserving
+    all factual content.
+    """
+
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(
+            ",",
+            ":",
+        ),
+    )
+
+
+# =============================================================
 # EVIDENCE SELECTION
 # =============================================================
 
@@ -115,9 +152,9 @@ def build_overview_evidence(
     registry: dict,
 ) -> dict:
     """
-    Select ONLY evidence relevant to the Overview section.
+    Select ONLY evidence relevant to Overview.
 
-    Gemini must not receive the complete evidence registry.
+    The complete registry is never passed to the LLM.
     """
 
     required_ids = [
@@ -142,9 +179,9 @@ def build_overview_evidence(
                 f"{evidence_id}"
             )
 
-        selected[evidence_id] = registry[
-            evidence_id
-        ]
+        selected[evidence_id] = (
+            registry[evidence_id]
+        )
 
     return selected
 
@@ -158,90 +195,102 @@ def build_overview_prompt(
     evidence: dict,
 ) -> str:
     """
-    Build the user prompt for the Overview section.
+    Build the grounded Overview user prompt.
 
-    The system prompt is supplied separately to Gemini.
+    system.txt is intentionally NOT included here.
+
+    GeminiClient receives system.txt separately.
     """
 
     overview_prompt = load_prompt(
         "overview.txt"
     )
 
-    prompt = f"""
-{overview_prompt}
+    # ---------------------------------------------------------
+    # Compact evidence
+    # ---------------------------------------------------------
 
-============================================================
-APPROVED EVIDENCE
-============================================================
+    evidence_text = compact_json(
+        evidence
+    )
 
-The following evidence IDs are the ONLY approved sources
-for factual claims in this Overview section.
+    # ---------------------------------------------------------
+    # Compact context
+    #
+    # Keep context because Overview-specific context may contain
+    # useful scope information, but serialize it compactly.
+    # ---------------------------------------------------------
 
-You MUST NOT reference evidence IDs that are not present
-below.
+    context_text = compact_json(
+        context
+    )
 
-{json.dumps(
-    evidence,
-    indent=2,
-    ensure_ascii=False,
-)}
+    # ---------------------------------------------------------
+    # Grounding rules
+    # ---------------------------------------------------------
 
-============================================================
-SECTION CONTEXT
-============================================================
+    grounding_rules = """
+STRICT OVERVIEW GROUNDING RULES:
 
-Use this section-specific context to understand the scope
-of the Overview.
+1. Use ONLY the approved evidence supplied below.
+2. Every factual claim MUST contain at least one evidence ID.
+3. Do not invent facts or statistics.
+4. Do not invent dates, percentages, ratios, rates, averages,
+   thresholds, or derived values.
+5. Every numeric value in claim text MUST appear explicitly in
+   the evidence supporting that claim.
+6. Do NOT write calendar dates in generated claims. Describe the
+   reporting period qualitatively, such as "during the reporting period".
+7. Do NOT calculate or derive percentages from case counts.
+8. Do NOT introduce 0.1% for the non-serious case unless 0.1 is
+   explicitly present in the supporting evidence. Prefer:
+   "One case was non-serious."
+9. Preserve numerical values exactly as supplied.
+10. Do not establish causality.
+11. Do not make a safety-signal determination.
+12. Do not make an expectedness determination.
+13. Do not introduce demographic or clinical interpretation.
+14. Evidence IDs must be copied exactly.
+15. Numbers inside evidence IDs are identifiers and must NOT be
+    copied into claim text as factual numbers.
+16. Return ONLY valid JSON. No markdown, code fences, explanations,
+    or commentary.
 
-{json.dumps(
-    context,
-    indent=2,
-    ensure_ascii=False,
-)}
+REQUIRED JSON STRUCTURE:
 
-============================================================
-GROUNDING REQUIREMENTS
-============================================================
-
-1. Use only the approved evidence supplied above.
-
-2. Every factual claim MUST contain one or more evidence IDs.
-
-3. Do not invent facts, statistics, dates, percentages,
-   clinical interpretations, or conclusions.
-
-4. Preserve numerical values from the evidence exactly.
-
-5. Do not calculate new statistics.
-
-6. Do not establish causality between bisoprolol and any
-   reported event.
-
-7. Do not determine expectedness because no product label
-   or CCDS was supplied.
-
-8. Do not introduce SOC-level conclusions because SOC data
-   is not available in the supplied dataset.
-
-9. Keep the wording appropriate for a pharmacovigilance
-   safety report.
-
-10. Return ONLY the required structured JSON response.
-
-The required JSON structure is:
-
-{{
-    "section": "overview",
-    "claims": [
-        {{
-            "text": "grounded factual statement",
-            "evidence_ids": [
-                "EV-..."
-            ]
-        }}
-    ]
-}}
+{
+  "section": "overview",
+  "claims": [
+    {
+      "text": "grounded factual statement",
+      "evidence_ids": ["EV-..."]
+    }
+  ]
+}
 """
+
+    # ---------------------------------------------------------
+    # Build final prompt
+    # ---------------------------------------------------------
+
+    prompt = (
+        overview_prompt
+        + "\n\n"
+        + grounding_rules
+        + "\n\n"
+        + "============================================================\n"
+        + "APPROVED EVIDENCE\n"
+        + "============================================================\n"
+        + evidence_text
+        + "\n\n"
+        + "============================================================\n"
+        + "SECTION CONTEXT\n"
+        + "============================================================\n"
+        + context_text
+        + "\n\n"
+        + "FINAL INSTRUCTION:\n"
+        + "Return ONLY the required JSON object."
+    )
 
     return prompt.strip()
 
@@ -256,10 +305,10 @@ def validate_overview(
     overview_evidence: dict,
 ) -> dict:
     """
-    Validate the generated Overview against:
+    Validate generated Overview against:
 
     - complete evidence registry
-    - Overview-approved evidence IDs
+    - approved Overview evidence IDs
     - numeric grounding
     """
 
@@ -270,7 +319,9 @@ def validate_overview(
     return validate_generated_section(
         generated=generated,
         registry=registry,
-        allowed_evidence_ids=allowed_evidence_ids,
+        allowed_evidence_ids=(
+            allowed_evidence_ids
+        ),
     )
 
 
@@ -282,12 +333,21 @@ def print_generated_overview(
     generated: dict,
 ) -> None:
     """
-    Print the generated structured Overview.
+    Print generated Overview JSON.
     """
 
-    print("\n" + "=" * 70)
-    print("GENERATED OVERVIEW")
-    print("=" * 70)
+    print(
+        "\n"
+        + "=" * 70
+    )
+
+    print(
+        "GENERATED OVERVIEW"
+    )
+
+    print(
+        "=" * 70
+    )
 
     print(
         json.dumps(
@@ -309,109 +369,186 @@ def print_validation_results(
     Print detailed deterministic validation results.
     """
 
-    print("\n" + "=" * 70)
-    print("EVIDENCE VALIDATION")
-    print("=" * 70)
+    print(
+        "\n"
+        + "=" * 70
+    )
 
-    if validation["valid"]:
+    print(
+        "EVIDENCE VALIDATION"
+    )
 
-        print("STATUS: PASS")
+    print(
+        "=" * 70
+    )
+
+    if validation.get(
+        "valid",
+        False,
+    ):
+
+        print(
+            "STATUS: PASS"
+        )
 
     else:
 
-        print("STATUS: FAIL")
+        print(
+            "STATUS: FAIL"
+        )
 
-        for error in validation[
-            "errors"
-        ]:
+        for error in validation.get(
+            "errors",
+            [],
+        ):
 
             print(
                 f"ERROR: {error}"
             )
 
     # ---------------------------------------------------------
-    # Evidence validation
+    # Claim validation
     # ---------------------------------------------------------
 
-    print("\n" + "=" * 70)
-    print("CLAIM VALIDATION DETAILS")
-    print("=" * 70)
+    print(
+        "\n"
+        + "=" * 70
+    )
 
-    for item in validation[
-        "evidence_validation"
-    ]:
+    print(
+        "CLAIM VALIDATION DETAILS"
+    )
+
+    print(
+        "=" * 70
+    )
+
+    for item in validation.get(
+        "evidence_validation",
+        [],
+    ):
 
         status = (
             "PASS"
-            if item["valid"]
+            if item.get(
+                "valid",
+                False,
+            )
             else "FAIL"
         )
 
         print(
-            f"\nClaim {item['claim_index']}: "
+            f"\nClaim {item.get('claim_index')}: "
             f"{status}"
         )
 
         print(
-            f"Text: {item['claim']}"
+            f"Text: {item.get('claim')}"
         )
 
         print(
             "Evidence IDs: "
-            f"{item['evidence_ids']}"
+            f"{item.get('evidence_ids')}"
         )
 
-        if item["errors"]:
+        for error in item.get(
+            "errors",
+            [],
+        ):
 
-            for error in item[
-                "errors"
-            ]:
-
-                print(
-                    f"  ERROR: {error}"
-                )
+            print(
+                f"  ERROR: {error}"
+            )
 
     # ---------------------------------------------------------
     # Numeric validation
     # ---------------------------------------------------------
 
-    print("\n" + "=" * 70)
-    print("NUMERIC VALIDATION")
-    print("=" * 70)
+    print(
+        "\n"
+        + "=" * 70
+    )
 
-    for item in validation[
-        "number_validation"
-    ]:
+    print(
+        "NUMERIC VALIDATION"
+    )
+
+    print(
+        "=" * 70
+    )
+
+    for item in validation.get(
+        "number_validation",
+        [],
+    ):
 
         status = (
             "PASS"
-            if item["valid"]
+            if item.get(
+                "valid",
+                False,
+            )
             else "FAIL"
         )
 
         print(
-            f"\nClaim {item['claim_index']}: "
+            f"\nClaim {item.get('claim_index')}: "
             f"{status}"
         )
 
         print(
-            f"Claim numbers: "
-            f"{item['claim_numbers']}"
+            "Claim numbers: "
+            f"{item.get('claim_numbers')}"
         )
 
         print(
-            f"Supported numbers: "
-            f"{item['supported_numbers']}"
+            "Supported numbers: "
+            f"{item.get('supported_numbers')}"
         )
 
-        if item[
-            "unsupported_numbers"
-        ]:
+        unsupported = item.get(
+            "unsupported_numbers",
+            [],
+        )
+
+        if unsupported:
 
             print(
                 "Unsupported numbers: "
-                f"{item['unsupported_numbers']}"
+                f"{unsupported}"
             )
+
+
+# =============================================================
+# SAVE VALIDATED OVERVIEW
+# =============================================================
+
+def save_validated_overview(
+    generated: dict,
+    validation: dict,
+) -> Path:
+    """
+    Save ONLY the generated section and validation result.
+
+    Internal evidence/context is deliberately not included.
+    """
+
+    result = dict(generated)
+    result["validation"] = validation
+
+    with open(
+        OUTPUT_PATH,
+        "w",
+        encoding="utf-8",
+    ) as f:
+        json.dump(
+            result,
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    return OUTPUT_PATH
 
 
 # =============================================================
@@ -434,20 +571,30 @@ def generate_overview() -> dict:
             ↓
         Overview context
             ↓
-        Overview evidence selection
+        Approved evidence selection
             ↓
-        Gemini structured generation
+        Gemini generation
+            ↓
+        Automatic Groq fallback if Gemini fails
             ↓
         Evidence validation
             ↓
         Numeric validation
+            ↓
+        Save validated output
     """
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
+
     print(
         "GENAR — GROUNDED OVERVIEW GENERATION"
     )
-    print("=" * 70)
+
+    print(
+        "=" * 70
+    )
 
     # =========================================================
     # 1. LOAD DATASET
@@ -476,7 +623,7 @@ def generate_overview() -> dict:
     )
 
     print(
-        f"      Canonical cases: "
+        "      Canonical cases: "
         f"{len(cases_df):,}"
     )
 
@@ -509,7 +656,7 @@ def generate_overview() -> dict:
     )
 
     print(
-        f"      Registry items: "
+        "      Registry items: "
         f"{len(registry)}"
     )
 
@@ -543,13 +690,44 @@ def generate_overview() -> dict:
             f"        {evidence_id}"
         )
 
+    # ---------------------------------------------------------
+    # Build prompt
+    # ---------------------------------------------------------
+
     prompt = build_overview_prompt(
         context=context,
         evidence=overview_evidence,
     )
 
+    # ---------------------------------------------------------
+    # Prompt diagnostics
+    # ---------------------------------------------------------
+
+    prompt_characters = len(
+        prompt
+    )
+
+    estimated_tokens = (
+        prompt_characters
+        // 4
+    )
+
+    print(
+        "\n      Prompt diagnostics:"
+    )
+
+    print(
+        f"        Characters: "
+        f"{prompt_characters:,}"
+    )
+
+    print(
+        f"        Estimated tokens: "
+        f"{estimated_tokens:,}"
+    )
+
     # =========================================================
-    # 6. GENERATE WITH GEMINI
+    # 6. GENERATE
     # =========================================================
 
     print(
@@ -563,6 +741,8 @@ def generate_overview() -> dict:
         system_instruction=load_prompt(
             "system.txt"
         ),
+        temperature=TEMPERATURE,
+        max_output_tokens=MAX_OUTPUT_TOKENS,
     )
 
     # =========================================================
@@ -580,7 +760,9 @@ def generate_overview() -> dict:
     validation = validate_overview(
         generated=generated,
         registry=registry,
-        overview_evidence=overview_evidence,
+        overview_evidence=(
+            overview_evidence
+        ),
     )
 
     print_validation_results(
@@ -588,12 +770,49 @@ def generate_overview() -> dict:
     )
 
     # =========================================================
+    # SAVE ONLY IF VALID
+    # =========================================================
+
+    if validation.get(
+        "valid",
+        False,
+    ):
+
+        output_path = (
+            save_validated_overview(
+                generated=generated,
+                validation=validation,
+            )
+        )
+
+        print(
+            "\n      Saved validated section:"
+        )
+
+        print(
+            f"      {output_path}"
+        )
+
+    else:
+
+        print(
+            "\n      Overview was NOT saved "
+            "because validation failed."
+        )
+
+    # =========================================================
     # FINAL STATUS
     # =========================================================
 
-    print("\n" + "=" * 70)
+    print(
+        "\n"
+        + "=" * 70
+    )
 
-    if validation["valid"]:
+    if validation.get(
+        "valid",
+        False,
+    ):
 
         print(
             "FINAL STATUS: "
@@ -604,17 +823,24 @@ def generate_overview() -> dict:
 
         print(
             "FINAL STATUS: "
-            "VALIDATION FAILED"
+            "OVERVIEW VALIDATION FAILED"
         )
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
-    return {
-        "generated": generated,
-        "validation": validation,
-        "context": context,
-        "overview_evidence": overview_evidence,
-    }
+    # ---------------------------------------------------------
+    # IMPORTANT:
+    #
+    # Return the same compact structure that is saved.
+    # This keeps direct execution and build_report.py consistent.
+    # ---------------------------------------------------------
+
+    result = dict(generated)
+    result["validation"] = validation
+
+    return result
 
 
 # =============================================================

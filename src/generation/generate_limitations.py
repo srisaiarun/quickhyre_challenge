@@ -47,6 +47,49 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 
 PROMPTS_DIR = BASE_DIR / "src" / "prompts"
 
+# =============================================================
+# SECTION OUTPUT PATH
+# =============================================================
+
+SECTION_OUTPUT_DIR = (
+    BASE_DIR
+    / "outputs"
+    / "sections"
+)
+
+SECTION_OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True,
+)
+
+
+def save_section_output(
+    result: dict,
+    filename: str,
+) -> Path:
+    """
+    Save a validated section result to outputs/sections.
+    """
+
+    output_path = (
+        SECTION_OUTPUT_DIR
+        / filename
+    )
+
+    with open(
+        output_path,
+        "w",
+        encoding="utf-8",
+    ) as f:
+        json.dump(
+            result,
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    return output_path
+
 
 # =============================================================
 # PROMPT LOADING
@@ -440,6 +483,35 @@ def generate_limitations():
             )
 
     # =========================================================
+    # BUILD FINAL RESULT
+    # =========================================================
+
+    result = {
+        "section": "limitations",
+        "claims": generated.get(
+            "claims",
+            [],
+        ),
+        "validation": validation,
+    }
+
+    # =========================================================
+    # SAVE VALIDATED OUTPUT
+    # =========================================================
+
+    if validation["valid"]:
+
+        output_path = save_section_output(
+            result=result,
+            filename="limitations.json",
+        )
+
+        print(
+            f"\n      Saved validated section:"
+            f"\n      {output_path}"
+        )
+
+    # =========================================================
     # FINAL STATUS
     # =========================================================
 
@@ -461,10 +533,7 @@ def generate_limitations():
 
     print("=" * 70)
 
-    return {
-        "generated": generated,
-        "validation": validation,
-    }
+    return result
 
 
 # =============================================================
