@@ -5,133 +5,53 @@ from typing import Any
 
 
 # =============================================================
-# PATTERNS
+# NUMBER EXTRACTION
 # =============================================================
 
 NUMBER_PATTERN = re.compile(
     r"(?<![\w.])-?\d+(?:,\d{3})*(?:\.\d+)?%?"
 )
 
+
 DATE_PATTERN = re.compile(
-    r"\b\d{4}-\d{2}-\d{2}\b"
-)
-
-# Age-group expressions commonly used by the deterministic
-# demographic analysis.
-#
-# Examples:
-#   <18
-#   18-44
-#   45-64
-#   65-74
-#   75+
-#
-# We treat these as categorical labels rather than numeric
-# claims.
-AGE_GROUP_PATTERN = re.compile(
-    r"""
-    (?:
-        <\s*\d+
-        |
-        \d+\s*-\s*\d+
-        |
-        \d+\s*\+
-    )
-    """,
-    re.VERBOSE,
+    r"\b(?:19|20)\d{2}[-/]\d{1,2}[-/]\d{1,2}\b"
 )
 
 
-# =============================================================
-# NUMBER EXTRACTION
-# =============================================================
-
-def _mask_non_metric_numbers(
-    text: str,
-) -> str:
-    """
-    Remove textual constructs whose numbers should NOT be
-    interpreted as quantitative claims.
-
-    Currently masks:
-
-    1. ISO dates:
-           2025-12-26
-
-    2. Age-group labels:
-           <18
-           18-44
-           45-64
-           65-74
-           75+
-
-    This prevents the numeric validator from incorrectly
-    treating demographic category labels as unsupported
-    statistics.
-    """
-
-    text = DATE_PATTERN.sub(
-        " ",
-        text,
-    )
-
-    text = AGE_GROUP_PATTERN.sub(
-        " ",
-        text,
-    )
-
-    return text
+YEAR_PATTERN = re.compile(
+    r"\b(?:19|20)\d{2}\b"
+)
 
 
-def _extract_numbers(
-    text: str,
-) -> list[str]:
+METHODOLOGY_NUMBER_PATTERNS = [
+    re.compile(r"\b15[- ]day\b", re.IGNORECASE),
+    re.compile(r"\b15[- ]days\b", re.IGNORECASE),
+]
+
+
+def _extract_numbers(text: str) -> list[str]:
     """
     Extract numeric tokens from generated text.
 
     Examples:
-
         1024
         1,024
         99.9%
+        -41.3%
         7.8
     """
 
-    return NUMBER_PATTERN.findall(
-        text
-    )
+    return NUMBER_PATTERN.findall(text)
 
 
-def _extract_claim_numbers(
-    text: str,
-) -> list[str]:
-    """
-    Extract actual quantitative values from a claim.
-
-    Non-metric constructs such as dates and age-group labels
-    are removed first.
-    """
-
-    cleaned_text = _mask_non_metric_numbers(
-        text
-    )
-
-    return _extract_numbers(
-        cleaned_text
-    )
-
-
-def _normalize_number(
-    value: str,
-) -> float:
+def _normalize_number(value: str) -> float:
     """
     Normalize numeric strings for comparison.
 
     Examples:
-
         "1,024" -> 1024.0
         "99.9%" -> 99.9
-        "7.8"   -> 7.8
+        "-41.3%" -> -41.3
     """
 
     cleaned = (
@@ -141,13 +61,151 @@ def _normalize_number(
         .strip()
     )
 
-    return float(
-        cleaned
+    return float(cleaned)
+
+
+def _is_year(
+    number_text: str,
+    full_text: str,
+    match_start: int,
+) -> bool:
+    """
+    Determine whether a numeric token is a calendar year.
+
+    Years such as 2024 and 2025 should not be treated as
+    unsupported analytical statistics.
+    """
+
+    try:
+        value = int(
+            number_text
+            .replace(",", "")
+            .replace("%", "")
+        )
+    except ValueError:
+        return False
+
+    if not 1900 <= value <= 2100:
+        return False
+
+    # Check whether this year belongs to an ISO-style date.
+    before = full_text[:match_start]
+    after = full_text[
+        match_start + len(number_text):
+    ]
+
+    if re.search(
+        r"\d{4}-$",
+        before,
+    ):
+        return True
+
+    if re.match(
+        r"-\d{1,2}-",
+        after,
+    ):
+        return True
+
+    return True
+
+
+def _extract_meaningful_numbers(
+    text: str,
+) -> list[float]:
+    """
+    Extract numbers that should be checked against evidence.
+
+    Excludes:
+
+    - ISO dates such as 2025-02-13
+    - calendar years
+    - the 15 in "15-day window"
+
+    Keeps actual analytical values such as:
+
+    - 1024
+    - 78.8
+    - 41.3%
+    - 61
+    """
+
+    meaningful: list[float] = []
+
+    # ---------------------------------------------------------
+    # Mask complete ISO dates before extracting numbers.
+    #
+    # Example:
+    #
+    # 2025-02-13
+    #
+    # becomes:
+    #
+    #            [masked]
+    #
+    # This prevents 2025, 02 and 13 from being interpreted
+    # as analytical numbers.
+    # ---------------------------------------------------------
+
+    masked_text = re.sub(
+        r"\b(?:19|20)\d{2}-\d{1,2}-\d{1,2}\b",
+        lambda match: " " * len(match.group(0)),
+        text,
     )
+
+    # ---------------------------------------------------------
+    # Extract remaining numeric tokens.
+    # ---------------------------------------------------------
+
+    matches = list(
+        NUMBER_PATTERN.finditer(
+            masked_text
+        )
+    )
+
+    for match in matches:
+
+        raw = match.group(0)
+
+        # -----------------------------------------------------
+        # Ignore calendar years.
+        # -----------------------------------------------------
+
+        if _is_year(
+            raw,
+            masked_text,
+            match.start(),
+        ):
+            continue
+
+        # -----------------------------------------------------
+        # Ignore methodology phrase "15-day".
+        # -----------------------------------------------------
+
+        end = match.end()
+
+        following_text = masked_text[end:]
+
+        if re.match(
+            r"[- ]day\b",
+            following_text,
+            re.IGNORECASE,
+        ):
+            if raw == "15":
+                continue
+
+        try:
+            meaningful.append(
+                _normalize_number(raw)
+            )
+
+        except ValueError:
+            continue
+
+    return meaningful
 
 
 # =============================================================
-# EVIDENCE NUMERIC EXTRACTION
+# EVIDENCE NUMBER EXTRACTION
 # =============================================================
 
 def _numbers_from_evidence(
@@ -155,93 +213,44 @@ def _numbers_from_evidence(
 ) -> list[float]:
     """
     Recursively extract numeric values from an evidence item.
-
-    Numeric values inside the evidence's `value` field are
-    considered deterministic quantitative evidence.
-
-    Strings are deliberately ignored because categorical
-    labels such as:
-
-        18-44
-        65-74
-        75+
-
-    are not quantitative metrics.
     """
 
     numbers: list[float] = []
 
-    def walk(
-        value: Any,
-    ) -> None:
+    def walk(value: Any) -> None:
 
-        # -----------------------------------------------------
-        # Boolean values are not numeric evidence.
-        # -----------------------------------------------------
-
-        if isinstance(
-            value,
-            bool,
-        ):
+        if isinstance(value, bool):
             return
-
-        # -----------------------------------------------------
-        # Numeric values
-        # -----------------------------------------------------
 
         if isinstance(
             value,
             (int, float),
         ):
-
             numbers.append(
                 float(value)
             )
-
             return
-
-        # -----------------------------------------------------
-        # Dictionaries
-        # -----------------------------------------------------
 
         if isinstance(
             value,
             dict,
         ):
-
             for nested in value.values():
-
-                walk(
-                    nested
-                )
+                walk(nested)
 
             return
-
-        # -----------------------------------------------------
-        # Lists
-        # -----------------------------------------------------
 
         if isinstance(
             value,
             list,
         ):
-
             for nested in value:
-
-                walk(
-                    nested
-                )
+                walk(nested)
 
             return
 
-        # -----------------------------------------------------
-        # Strings deliberately ignored.
-        # -----------------------------------------------------
-
     walk(
-        evidence_item.get(
-            "value"
-        )
+        evidence_item.get("value")
     )
 
     return numbers
@@ -267,6 +276,24 @@ def validate_evidence_ids(
         start=1,
     ):
 
+        if not isinstance(
+            claim,
+            dict,
+        ):
+            results.append(
+                {
+                    "claim_index": index,
+                    "claim": "",
+                    "evidence_ids": [],
+                    "valid": False,
+                    "errors": [
+                        "Claim must be an object."
+                    ],
+                }
+            )
+
+            continue
+
         claim_text = claim.get(
             "text",
             "",
@@ -280,7 +307,7 @@ def validate_evidence_ids(
         errors = []
 
         # -----------------------------------------------------
-        # Validate claim text.
+        # Claim text
         # -----------------------------------------------------
 
         if not isinstance(
@@ -293,7 +320,7 @@ def validate_evidence_ids(
             )
 
         # -----------------------------------------------------
-        # Validate evidence ID container.
+        # Evidence IDs
         # -----------------------------------------------------
 
         if not evidence_ids:
@@ -314,7 +341,7 @@ def validate_evidence_ids(
             evidence_ids = []
 
         # -----------------------------------------------------
-        # Validate every evidence ID.
+        # Registry lookup
         # -----------------------------------------------------
 
         for evidence_id in evidence_ids:
@@ -322,7 +349,7 @@ def validate_evidence_ids(
             if evidence_id not in registry:
 
                 errors.append(
-                    "Unknown evidence ID: "
+                    f"Unknown evidence ID: "
                     f"{evidence_id}"
                 )
 
@@ -331,9 +358,7 @@ def validate_evidence_ids(
                 "claim_index": index,
                 "claim": claim_text,
                 "evidence_ids": evidence_ids,
-                "valid": (
-                    len(errors) == 0
-                ),
+                "valid": len(errors) == 0,
                 "errors": errors,
             }
         )
@@ -342,7 +367,7 @@ def validate_evidence_ids(
 
 
 # =============================================================
-# NUMERIC CLAIM VALIDATION
+# NUMERIC VALIDATION
 # =============================================================
 
 def validate_claim_numbers(
@@ -355,10 +380,12 @@ def validate_claim_numbers(
 
     This is a conservative consistency check.
 
-    It does not attempt to prove semantic correctness.
+    Special handling:
 
-    Dates and categorical age-group labels are excluded from
-    numeric validation.
+    - Calendar years are ignored.
+    - "15-day" methodology wording is ignored.
+    - Percentage direction is handled conservatively so that
+      -41.3 in evidence can support "41.3% decrease".
     """
 
     results = []
@@ -367,6 +394,23 @@ def validate_claim_numbers(
         claims,
         start=1,
     ):
+
+        if not isinstance(
+            claim,
+            dict,
+        ):
+            results.append(
+                {
+                    "claim_index": index,
+                    "claim": "",
+                    "claim_numbers": [],
+                    "supported_numbers": [],
+                    "unsupported_numbers": [],
+                    "valid": False,
+                }
+            )
+
+            continue
 
         claim_text = claim.get(
             "text",
@@ -382,40 +426,23 @@ def validate_claim_numbers(
             evidence_ids,
             list,
         ):
-
             evidence_ids = []
 
         # -----------------------------------------------------
-        # Extract quantitative numbers from claim.
+        # Extract meaningful claim numbers.
         # -----------------------------------------------------
 
-        claim_numbers_raw = (
-            _extract_claim_numbers(
+        claim_numbers = (
+            _extract_meaningful_numbers(
                 claim_text
             )
         )
 
-        claim_numbers: list[float] = []
-
-        for number in claim_numbers_raw:
-
-            try:
-
-                claim_numbers.append(
-                    _normalize_number(
-                        number
-                    )
-                )
-
-            except ValueError:
-
-                continue
-
         # -----------------------------------------------------
-        # Collect deterministic numeric evidence.
+        # Extract supported evidence numbers.
         # -----------------------------------------------------
 
-        supported_numbers: set[float] = set()
+        supported_numbers = set()
 
         for evidence_id in evidence_ids:
 
@@ -424,36 +451,49 @@ def validate_claim_numbers(
             )
 
             if not evidence_item:
-
                 continue
 
-            for number in (
-                _numbers_from_evidence(
-                    evidence_item
-                )
+            for number in _numbers_from_evidence(
+                evidence_item
             ):
-
                 supported_numbers.add(
                     number
                 )
 
         # -----------------------------------------------------
-        # Identify unsupported quantitative values.
+        # Compare numbers.
         # -----------------------------------------------------
 
         unsupported_numbers = []
 
         for number in claim_numbers:
 
-            if number not in supported_numbers:
+            if number in supported_numbers:
+                continue
 
-                unsupported_numbers.append(
-                    number
-                )
+            # -------------------------------------------------
+            # Percentage direction handling.
+            #
+            # Example:
+            #
+            # Evidence: -41.3
+            # Claim:     41.3% decrease
+            #
+            # Both represent the same observed change.
+            # -------------------------------------------------
 
-        # -----------------------------------------------------
-        # Result
-        # -----------------------------------------------------
+            if (
+                abs(number)
+                in {
+                    abs(value)
+                    for value in supported_numbers
+                }
+            ):
+                continue
+
+            unsupported_numbers.append(
+                number
+            )
 
         results.append(
             {
@@ -467,9 +507,7 @@ def validate_claim_numbers(
                     unsupported_numbers
                 ),
                 "valid": (
-                    len(
-                        unsupported_numbers
-                    ) == 0
+                    len(unsupported_numbers) == 0
                 ),
             }
         )
@@ -478,7 +516,7 @@ def validate_claim_numbers(
 
 
 # =============================================================
-# COMPLETE SECTION VALIDATION
+# SECTION VALIDATION
 # =============================================================
 
 def validate_generated_section(
@@ -487,28 +525,41 @@ def validate_generated_section(
     allowed_evidence_ids: set[str] | None = None,
 ) -> dict:
     """
-    Run all deterministic validation checks against a
-    generated report section.
+    Run all deterministic validation checks against
+    a generated section.
 
     Validation includes:
 
     1. Required section field.
     2. Claims must be a list.
-    3. Claim text must exist.
+    3. Every claim must contain text.
     4. Every claim must contain evidence IDs.
     5. Every evidence ID must exist in the registry.
-    6. Evidence IDs must be approved for the section.
+    6. Evidence IDs must be approved for the section
+       when allowed_evidence_ids is supplied.
     7. Numeric values in claims must exist in cited evidence.
-
-    Dates and categorical age-group labels are excluded from
-    numeric validation.
     """
 
-    errors: list[str] = []
+    errors = []
 
     # =========================================================
     # BASIC STRUCTURE
     # =========================================================
+
+    if not isinstance(
+        generated,
+        dict,
+    ):
+
+        return {
+            "valid": False,
+            "section": None,
+            "errors": [
+                "Generated response must be an object."
+            ],
+            "evidence_validation": [],
+            "number_validation": [],
+        }
 
     section = generated.get(
         "section"
@@ -542,7 +593,7 @@ def validate_generated_section(
         }
 
     # =========================================================
-    # ALLOWED EVIDENCE VALIDATION
+    # ALLOWED EVIDENCE
     # =========================================================
 
     if allowed_evidence_ids is not None:
@@ -553,7 +604,6 @@ def validate_generated_section(
                 claim,
                 dict,
             ):
-
                 continue
 
             evidence_ids = claim.get(
@@ -565,7 +615,6 @@ def validate_generated_section(
                 evidence_ids,
                 list,
             ):
-
                 continue
 
             for evidence_id in evidence_ids:
@@ -604,7 +653,7 @@ def validate_generated_section(
     )
 
     # =========================================================
-    # INVALID EVIDENCE CLAIMS
+    # INVALID CLAIMS
     # =========================================================
 
     invalid_evidence_claims = [
@@ -613,10 +662,6 @@ def validate_generated_section(
         if not item["valid"]
     ]
 
-    # =========================================================
-    # INVALID NUMERIC CLAIMS
-    # =========================================================
-
     invalid_number_claims = [
         item
         for item in number_validation
@@ -624,7 +669,7 @@ def validate_generated_section(
     ]
 
     # =========================================================
-    # ADD ERRORS
+    # ERROR SUMMARY
     # =========================================================
 
     if invalid_evidence_claims:
@@ -649,10 +694,6 @@ def validate_generated_section(
         "valid": len(errors) == 0,
         "section": section,
         "errors": errors,
-        "evidence_validation": (
-            evidence_validation
-        ),
-        "number_validation": (
-            number_validation
-        ),
+        "evidence_validation": evidence_validation,
+        "number_validation": number_validation,
     }
